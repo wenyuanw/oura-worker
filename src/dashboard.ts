@@ -66,7 +66,8 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
   box-shadow:0 12px 32px rgba(0,0,0,.55) }
 .menu.open { display:block }
 .menu .section { padding:6px 10px 4px; font-size:11px; color:var(--fg-subtle); text-transform:uppercase; letter-spacing:.06em }
-.menu-item { display:flex; align-items:center; justify-content:flex-start; gap:8px; width:100%; padding:8px 10px;
+.menu-item { appearance: none; -webkit-appearance: none; display:flex; align-items:center; justify-content:flex-start;
+  gap:8px; width:100%; padding:8px 10px;
   border:none; border-radius:6px; background:transparent; color:var(--fg); font-size:13px; cursor:pointer;
   text-align:left; font-family:inherit }
 .menu-item:hover { background:#1c1c1c }
