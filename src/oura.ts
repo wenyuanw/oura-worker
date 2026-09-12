@@ -129,5 +129,11 @@ export async function fetchPersonalInfo(env: Env, accessToken: string): Promise<
   })
   const json: any = await res.json().catch(() => ({}))
   if (!res.ok) throw new OuraError(res.status, json?.detail || `personal_info failed (${res.status})`)
-  return { id: String(json?.data?.id ?? ''), email: json?.data?.email || undefined }
+  // Oura 文档：personal_info 返回扁平对象 { id, age, email, ... }；这里兼容可能的 { data: {...} } 包裹
+  const data = json?.data ?? json
+  const id = String(data?.id ?? '')
+  if (!id) {
+    throw new OuraError(502, `personal_info 响应中没有 id（返回字段：${Object.keys(json ?? {}).join(', ') || '空'}）`)
+  }
+  return { id, email: data?.email || undefined }
 }
