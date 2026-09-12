@@ -75,7 +75,12 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
   background:var(--surface-2); border:1px solid var(--border-strong); color:var(--fg); font-size:13px; font-weight:500;
   cursor:pointer; transition:border-color .15s; font-family:inherit }
 .avatar-btn:hover { border-color:var(--hover-border) }
-.icon-btn { width:36px; height:36px; padding:0; border-radius:999px; font-size:14px }
+.icon-btn { width:36px; height:36px; padding:0; border-radius:999px; font-size:14px;
+  display:inline-flex; align-items:center; justify-content:center }
+.icon-btn svg { width:16px; height:16px; display:block }
+.icon-btn .icon-moon { display:none }
+:root[data-theme="light"] .icon-btn .icon-sun { display:none }
+:root[data-theme="light"] .icon-btn .icon-moon { display:block }
 .avatar { width:28px; height:28px; border-radius:50%; background:var(--avatar-bg); display:inline-flex; align-items:center;
   justify-content:center; font-size:12px; font-weight:600; flex:none }
 .avatar-name { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
@@ -243,7 +248,10 @@ export function dashboardPage(): string {
     'Oura Dashboard',
     `<div class="topbar"><div class="topbar-inner">
   <div class="brand">${BRAND}</div>
-  <button class="icon-btn" id="themeBtn" title="切换深色/浅色主题">☀️</button>
+  <button class="icon-btn" id="themeBtn" title="切换深色/浅色主题" aria-label="切换主题">
+    <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+    <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+  </button>
   <div class="menu-wrap" id="userMenuWrap">
     <button class="avatar-btn" id="userMenuBtn" aria-haspopup="menu">
       <span class="avatar" id="avatarInitial">–</span>
@@ -442,7 +450,6 @@ function init() {
   function applyTheme(t) {
     document.documentElement.setAttribute('data-theme', t)
     try { localStorage.setItem('oura_theme', t) } catch (e) {}
-    $('#themeBtn').textContent = t === 'light' ? '🌙' : '☀️'
     var meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.content = t === 'light' ? '#ffffff' : '#000000'
   }
