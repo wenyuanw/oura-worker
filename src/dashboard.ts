@@ -161,6 +161,12 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
   transition:color .2s; touch-action:manipulation }
 .tabbar button.active { color:var(--fg) }
 
+/* ---- 骨架屏 ---- */
+.skel { display:inline-block; background:var(--border-strong); opacity:.45; border-radius:6px;
+  animation:skelPulse 1.3s ease-in-out infinite }
+@keyframes skelPulse { 0%,100% { opacity:.45 } 50% { opacity:.18 } }
+.skel-circle { background:var(--surface-2); border:2px solid var(--border) }
+
 /* ---- 交互动效 ---- */
 @keyframes fadeInUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } }
 @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
@@ -371,8 +377,27 @@ export function dashboardPage(): string {
 
   <div id="app">
     <div id="mobHome">
-      <div class="circle-row" id="circleRow"></div>
-      <div id="mobCards"></div>
+      <div class="circle-row" id="circleRow">
+        <div class="circle-item"><div class="circle skel-circle skel"></div><div class="skel" style="width:52px;height:12px"></div></div>
+        <div class="circle-item"><div class="circle skel-circle skel"></div><div class="skel" style="width:52px;height:12px"></div></div>
+        <div class="circle-item"><div class="circle skel-circle skel"></div><div class="skel" style="width:52px;height:12px"></div></div>
+        <div class="circle-item"><div class="circle skel-circle skel"></div><div class="skel" style="width:52px;height:12px"></div></div>
+        <div class="circle-item"><div class="circle skel-circle skel"></div><div class="skel" style="width:52px;height:12px"></div></div>
+      </div>
+      <div id="mobCards">
+        <div class="mcard" style="cursor:default">
+          <div class="mcard-head"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:88px;height:14px"></span><span style="flex:1"></span><span class="skel" style="width:40px;height:12px"></span></div>
+          <div class="mcard-body"><div><span class="skel" style="width:30px;height:11px;display:block;margin-bottom:8px"></span><span class="skel" style="width:60px;height:32px;display:block"></span></div><span class="skel" style="width:90px;height:36px"></span></div>
+        </div>
+        <div class="mcard" style="cursor:default">
+          <div class="mcard-head"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:72px;height:14px"></span><span style="flex:1"></span><span class="skel" style="width:40px;height:12px"></span></div>
+          <div class="mcard-body"><div><span class="skel" style="width:30px;height:11px;display:block;margin-bottom:8px"></span><span class="skel" style="width:52px;height:32px;display:block"></span></div><span class="skel" style="width:90px;height:36px"></span></div>
+        </div>
+        <div class="mcard" style="cursor:default">
+          <div class="mcard-head"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:96px;height:14px"></span><span style="flex:1"></span><span class="skel" style="width:40px;height:12px"></span></div>
+          <div class="mcard-body"><div><span class="skel" style="width:30px;height:11px;display:block;margin-bottom:8px"></span><span class="skel" style="width:68px;height:32px;display:block"></span></div><span class="skel" style="width:90px;height:36px"></span></div>
+        </div>
+      </div>
     </div>
     <div class="toolbar">
       <div class="seg" id="rangeSeg">
@@ -382,7 +407,13 @@ export function dashboardPage(): string {
       </div>
     </div>
 
-    <div class="grid" id="stats"></div>
+    <div class="grid" id="stats">
+      <div class="stat card" style="--i:0"><div class="label"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:64px;height:12px"></span></div><div class="stat-body"><div class="stat-main"><div class="skel" style="width:70px;height:30px;display:block;margin-bottom:8px"></div><div class="skel" style="width:48px;height:11px;display:block"></div></div><span class="skel" style="width:90px;height:36px"></span></div></div>
+      <div class="stat card" style="--i:1"><div class="label"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:56px;height:12px"></span></div><div class="stat-body"><div class="stat-main"><div class="skel" style="width:64px;height:30px;display:block;margin-bottom:8px"></div><div class="skel" style="width:48px;height:11px;display:block"></div></div><span class="skel" style="width:90px;height:36px"></span></div></div>
+      <div class="stat card" style="--i:2"><div class="label"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:44px;height:12px"></span></div><div class="stat-body"><div class="stat-main"><div class="skel" style="width:58px;height:30px;display:block;margin-bottom:8px"></div><div class="skel" style="width:48px;height:11px;display:block"></div></div><span class="skel" style="width:90px;height:36px"></span></div></div>
+      <div class="stat card" style="--i:3"><div class="label"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:60px;height:12px"></span></div><div class="stat-body"><div class="stat-main"><div class="skel" style="width:66px;height:30px;display:block;margin-bottom:8px"></div><div class="skel" style="width:48px;height:11px;display:block"></div></div><span class="skel" style="width:90px;height:36px"></span></div></div>
+      <div class="stat card" style="--i:4"><div class="label"><span class="skel" style="width:10px;height:10px;border-radius:50%"></span><span class="skel" style="width:68px;height:12px"></span></div><div class="stat-body"><div class="stat-main"><div class="skel" style="width:54px;height:30px;display:block;margin-bottom:8px"></div><div class="skel" style="width:48px;height:11px;display:block"></div></div><span class="skel" style="width:90px;height:36px"></span></div></div>
+    </div>
 
     <div class="charts" id="chartsWrap">
       <div class="panel">
@@ -688,6 +719,11 @@ function loadAll() {
     renderMobile(rows)
   }).catch(function (e) {
     $('#stats').innerHTML = '<div class="card" style="color:var(--red)">加载失败: ' + e.message + '</div>'
+    var cc = $('#circleRow'), mc = $('#mobCards')
+    if (cc) cc.innerHTML = ''
+    if (mc) mc.innerHTML = '<div class="card" style="color:var(--red)">数据加载失败：' + e.message + '　<button class="btn" id="mobRetry">重试</button></div>'
+    var rb = $('#mobRetry')
+    if (rb) rb.onclick = function () { loadAll() }
   })
 }
 
