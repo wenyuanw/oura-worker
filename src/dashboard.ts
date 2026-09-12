@@ -52,7 +52,30 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
   display:flex; flex-wrap:wrap; gap:10px; align-items:center }
 .brand { display:flex; align-items:center; gap:10px; margin-right:auto; font-weight:600; font-size:15px }
 .brand .mark { width:14px; height:14px; border:2.5px solid var(--fg); border-radius:50% }
-.brand .env { font-size:11px; color:var(--fg-subtle); border:1px solid var(--border); border-radius:999px; padding:1px 8px; font-weight:400 }
+.avatar-btn { display:flex; align-items:center; gap:8px; height:36px; padding:0 12px 0 4px; border-radius:999px;
+  background:var(--surface-2); border:1px solid var(--border-strong); color:var(--fg); font-size:13px; font-weight:500;
+  cursor:pointer; transition:border-color .15s; font-family:inherit }
+.avatar-btn:hover { border-color:#444 }
+.avatar { width:28px; height:28px; border-radius:50%; background:#262626; display:inline-flex; align-items:center;
+  justify-content:center; font-size:12px; font-weight:600; flex:none }
+.avatar-name { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.caret { color:var(--fg-subtle); font-size:10px }
+.menu-wrap { position:relative }
+.menu { position:absolute; right:0; top:calc(100% + 8px); z-index:50; min-width:220px; background:var(--surface-2);
+  border:1px solid var(--border-strong); border-radius:10px; padding:6px; display:none;
+  box-shadow:0 12px 32px rgba(0,0,0,.55) }
+.menu.open { display:block }
+.menu .section { padding:6px 10px 4px; font-size:11px; color:var(--fg-subtle); text-transform:uppercase; letter-spacing:.06em }
+.menu-item { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px; border:none; border-radius:6px;
+  background:transparent; color:var(--fg); font-size:13px; cursor:pointer; text-align:left; font-family:inherit }
+.menu-item:hover { background:#1c1c1c }
+.menu-item:disabled { opacity:.5; cursor:default }
+.menu-item .label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.menu-item .check { visibility:hidden; color:var(--fg-muted) }
+.menu-item.active .check { visibility:visible }
+.menu-item.danger { color:var(--red) }
+.menu-item.danger:hover { background:rgba(238,0,0,.08) }
+.menu-divider { height:1px; background:var(--border); margin:6px 4px }
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
 .subtle { color:var(--fg-subtle) }
@@ -98,14 +121,6 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 
 /* ---- 移动端 ---- */
 @media (max-width: 720px) {
-  .topbar { position: static; backdrop-filter: none; background: var(--bg) }
-  .topbar-inner { height:auto; padding:10px 12px; row-gap:10px }
-  .brand { flex-basis:100%; margin-right:0 }
-  .topbar-inner select { flex:1 1 100%; min-width:0 }
-  .topbar-inner > button { flex:1 }
-  .topbar-inner > form { flex:1; display:inline }
-  .topbar-inner > form button { width:100% }
-  .topbar-inner button { padding:0 10px }
   .wrap { padding:16px 12px 64px }
   .panel { padding:14px }
   .panel.row { gap:8px }
@@ -121,6 +136,10 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
   .explorer-controls input[type=date] { flex:1 1 40%; min-width:0 }
   .login { margin-top:9vh; padding:24px 20px }
   .notice { padding:28px 16px }
+}
+@media (max-width: 480px) {
+  .avatar-name, .caret { display:none }
+  .avatar-btn { padding:3px }
 }
 `
 
@@ -190,11 +209,23 @@ export function dashboardPage(): string {
   return shell(
     'Oura Dashboard',
     `<div class="topbar"><div class="topbar-inner">
-  <div class="brand">${BRAND}<span class="env">oura-service</span></div>
-  <select id="user"></select>
-  <button id="sync">同步</button>
-  <button id="del" class="danger">断开</button>
-  <form action="/logout" method="post" style="display:inline"><button>登出</button></form>
+  <div class="brand">${BRAND}</div>
+  <div class="menu-wrap" id="userMenuWrap">
+    <button class="avatar-btn" id="userMenuBtn" aria-haspopup="menu">
+      <span class="avatar" id="avatarInitial">–</span>
+      <span class="avatar-name" id="avatarName"></span>
+      <span class="caret">▾</span>
+    </button>
+    <div class="menu" id="userMenu">
+      <div class="section">切换用户</div>
+      <div id="menuUsers"></div>
+      <div class="menu-divider"></div>
+      <button class="menu-item" id="miSync">同步数据</button>
+      <button class="menu-item danger" id="miDisconnect">断开此用户</button>
+      <div class="menu-divider"></div>
+      <button class="menu-item" id="miLogout">登出</button>
+    </div>
+  </div>
 </div></div>
 
 <div class="wrap">
@@ -345,19 +376,50 @@ function loadAll() {
 }
 
 function init() {
+  var menu = $('#userMenu')
+  function closeMenu() { menu.classList.remove('open') }
+  $('#userMenuBtn').onclick = function (e) { e.stopPropagation(); menu.classList.toggle('open') }
+  document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu() })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu() })
+
+  function setCurrent(uid) {
+    UID = uid
+    var u = null
+    for (var i = 0; i < USERS.length; i++) { if (USERS[i].id === uid) { u = USERS[i]; break } }
+    var name = u ? (u.email || u.id.slice(0, 8)) : '—'
+    $('#avatarName').textContent = name
+    $('#avatarInitial').textContent = name.slice(0, 1).toUpperCase()
+    Array.prototype.forEach.call(document.querySelectorAll('.menu-user'), function (b) {
+      b.classList.toggle('active', b.getAttribute('data-id') === uid)
+    })
+  }
+
+  function buildMenu() {
+    var box = $('#menuUsers')
+    box.innerHTML = ''
+    USERS.forEach(function (u) {
+      var b = document.createElement('button')
+      b.className = 'menu-item menu-user'
+      b.setAttribute('data-id', u.id)
+      var label = document.createElement('span')
+      label.className = 'label'
+      label.textContent = u.email || u.id.slice(0, 8)
+      var check = document.createElement('span')
+      check.className = 'check'
+      check.textContent = '✓'
+      b.appendChild(label)
+      b.appendChild(check)
+      b.onclick = function () { setCurrent(u.id); loadAll(); closeMenu() }
+      box.appendChild(b)
+    })
+  }
+
   api('/api/users').then(function (d) {
     USERS = d.users || []
-    if (!USERS.length) { $('#empty').style.display = 'block'; $('#app').style.display = 'none'; return }
-    var sel = $('#user')
-    USERS.forEach(function (u) {
-      var o = document.createElement('option')
-      o.value = u.id
-      o.textContent = (u.email || u.id.slice(0, 8)) + (u.lastSyncAt ? '' : '（未同步）')
-      sel.appendChild(o)
-    })
+    if (!USERS.length) { $('#userMenuWrap').style.display = 'none'; $('#empty').style.display = 'block'; $('#app').style.display = 'none'; return }
     UID = USERS[0].id
-    sel.value = UID
-    sel.onchange = function () { UID = sel.value; loadAll() }
+    buildMenu()
+    setCurrent(UID)
     loadAll()
   })
 
@@ -383,24 +445,30 @@ function init() {
     }
   })
 
-  $('#sync').onclick = function () {
-    var b = this
-    b.disabled = true
-    b.textContent = '同步中…'
+  var miSync = $('#miSync')
+  miSync.onclick = function () {
+    if (miSync.disabled) return
+    miSync.disabled = true
+    var old = miSync.textContent
+    miSync.textContent = '同步中…'
     api('/api/sync/' + UID, { method: 'POST' }).then(function () {
-      b.textContent = '同步'
-      b.disabled = false
+      miSync.textContent = old
+      miSync.disabled = false
       loadAll()
     }).catch(function (e) {
-      b.textContent = '同步'
-      b.disabled = false
+      miSync.textContent = old
+      miSync.disabled = false
       alert('同步失败: ' + e.message)
     })
   }
 
-  $('#del').onclick = function () {
+  $('#miDisconnect').onclick = function () {
     if (!confirm('确定断开当前用户并删除其数据缓存？')) return
     api('/api/connections/' + UID + '/disconnect', { method: 'POST' }).then(function () { location.reload() })
+  }
+
+  $('#miLogout').onclick = function () {
+    fetch('/logout', { method: 'POST' }).then(function () { location.href = '/login' })
   }
 
   var eps = ['daily_sleep', 'daily_readiness', 'daily_activity', 'daily_stress', 'daily_resilience', 'daily_spo2', 'daily_cardiovascular_age', 'vo2_max', 'sleep', 'sleep_time', 'heartrate', 'session', 'workout', 'tag', 'enhanced_tag', 'rest_mode_period', 'ring_configuration', 'personal_info']
