@@ -122,7 +122,8 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 
 /* ---- 移动端 App 式布局 ---- */
 #mobHome { display:none }
-.circle-row { display:flex; gap:16px; overflow-x:auto; padding:2px 2px 14px; scrollbar-width:none }
+.circle-row { display:flex; gap:16px; overflow-x:auto; padding:2px 2px 14px; scrollbar-width:none;
+  overscroll-behavior-x:contain; touch-action:pan-x }
 .circle-row::-webkit-scrollbar { display:none }
 .circle-item { flex:none; display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer }
 .circle { width:76px; height:76px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface);
@@ -132,7 +133,7 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
   font-variant-numeric:tabular-nums }
 .clabel { font-size:12px; color:var(--fg-muted) }
 .mcard { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px;
-  margin-bottom:12px; cursor:pointer }
+  margin-bottom:12px; cursor:pointer; scroll-margin-top:64px }
 .mcard-head { display:flex; align-items:center; gap:8px }
 .mcard-name { font-weight:600; font-size:14px }
 .mcard-date { margin-left:auto; color:var(--fg-subtle); font-size:12px }
@@ -145,9 +146,10 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .mcard-detail { display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:12px }
 .mcard.open .mcard-detail { display:block }
 .narrative { font-size:13px; color:var(--fg-muted); margin:0 0 14px; line-height:1.7 }
-.pillbars { display:flex; align-items:flex-end; gap:6px; height:150px }
-.pillbar { flex:1; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px }
-.pillbar .bar { width:10px; border-radius:999px; background:var(--fg); opacity:.92 }
+.pillbars { display:flex; align-items:flex-end; gap:4px; height:150px; overflow-x:auto; padding-bottom:2px }
+.pillbar { flex:1 0 8px; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+  gap:6px; min-width:0 }
+.pillbar .bar { width:100%; max-width:12px; min-width:4px; border-radius:999px; background:var(--fg); opacity:.92 }
 .pillbar.empty .bar { background:var(--border-strong); opacity:1 }
 .pillbar .lbl { font-size:11px; color:var(--fg-subtle) }
 .tabbar { display:none; position:fixed; bottom:14px; left:0; right:0; margin:0 auto; width:max-content; z-index:60;
@@ -253,6 +255,7 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 
 /* ---- 移动端 ---- */
 @media (max-width: 720px) {
+  .topbar { backdrop-filter:none; background:var(--bg) }
   .wrap { padding:16px 12px 110px }
   .grid { display:none }
   #mobHome { display:block }
@@ -655,7 +658,12 @@ function sparkSVG(vals, color) {
 function toggleCard(card, forceOpen) {
   var open = forceOpen === true ? true : !card.classList.contains('open')
   Array.prototype.forEach.call(document.querySelectorAll('.mcard'), function (c) { c.classList.remove('open') })
-  if (open) card.classList.add('open')
+  if (open) {
+    card.classList.add('open')
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      window.setTimeout(function () { card.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 80)
+    }
+  }
 }
 
 function renderMobile(rows) {
@@ -705,7 +713,6 @@ function renderMobile(rows) {
       var card = document.querySelector('.mcard[data-key="' + c.getAttribute('data-key') + '"]')
       if (!card) return
       toggleCard(card, true)
-      if (window.matchMedia('(max-width: 720px)').matches) card.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   })
 }
