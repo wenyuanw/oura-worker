@@ -1,0 +1,18 @@
+name = "oura-service"
+main = "src/index.ts"
+compatibility_date = "2025-08-01"
+
+[[kv_namespaces]]
+binding = "OURA_KV"
+id = "5820011a916043cd979863514841d623"
+
+[vars]
+# 请求的 Oura OAuth scope（空格分隔）
+OURA_SCOPE = "personal daily heartrate workout session spo2Daily email"
+# cron 同步时是否同时预取昨日+今日的每日概览数据（1 开启，0 关闭）
+CRON_PREFETCH = "1"
+# 如使用自定义域名导致回调推导不正确，取消注释并填写
+# REDIRECT_ORIGIN = "https://your.domain.com"
+
+[triggers]
+crons = ["17 * * * *"]

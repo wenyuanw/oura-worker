@@ -1,0 +1,3 @@
+OURA_CLIENT_ID=your-oura-client-id
+OURA_CLIENT_SECRET=your-oura-client-secret
+ADMIN_KEY=generate-with-openssl-rand-hex-16
