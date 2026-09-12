@@ -312,12 +312,23 @@ export function dashboardPage(): string {
 
     <div class="panel">
       <h2>原始数据探索器</h2>
-      <p class="desc">直接查询 Oura v2 任意端点</p>
+      <p class="desc">直接查询 Oura v2 任意端点，支持图表与原始数据两种视图</p>
       <div class="row explorer-controls">
         <select id="ep"></select>
         <input type="date" id="d1">
         <input type="date" id="d2">
         <button id="explore" class="primary">查询</button>
+      </div>
+      <div class="row" id="expResultBar" style="display:none; margin-top:14px">
+        <div class="seg" id="expViewSeg">
+          <button id="expViewChart">图表</button>
+          <button id="expViewRaw">原始数据</button>
+        </div>
+        <select id="expField" style="display:none"></select>
+        <span class="subtle" id="expStats" style="font-size:12px"></span>
+      </div>
+      <div class="chart-box" id="expChartBox" style="display:none; margin-top:12px; height:260px">
+        <canvas id="expChart"></canvas>
       </div>
       <pre id="out">选择端点后点击查询</pre>
     </div>
@@ -580,15 +591,118 @@ function init() {
   var d2 = new Date()
   $('#d1').value = d1.toISOString().slice(0, 10)
   $('#d2').value = d2.toISOString().slice(0, 10)
+  var expChart = null
+  var EXP = null
+
+  function parseExplorerData(d) {
+    var records = d && d.data ? d.data : (Array.isArray(d) ? d : null)
+    if (!records || !records.length) return { records: [], xKey: null, numKeys: [] }
+    var xCandidates = ['day', 'timestamp', 'start_timestamp', 'sleep_start', 'config_start_time', 'created_at']
+    var xKey = null
+    for (var i = 0; i < xCandidates.length; i++) { if (records[0][xCandidates[i]] != null) { xKey = xCandidates[i]; break } }
+    var numKeys = []
+    records.forEach(function (r) {
+      Object.keys(r).forEach(function (k) {
+        if (k === 'id' || k === xKey) return
+        var v = r[k]
+        if (typeof v === 'number') { if (numKeys.indexOf(k) < 0) numKeys.push(k) }
+        else if (v && typeof v === 'object' && !Array.isArray(v)) {
+          Object.keys(v).forEach(function (k2) {
+            var full = k + '.' + k2
+            if (typeof v[k2] === 'number' && numKeys.indexOf(full) < 0) numKeys.push(full)
+          })
+        }
+      })
+    })
+    return { records: records, xKey: xKey, numKeys: numKeys }
+  }
+
+  function getVal(r, path) {
+    var parts = path.split('.')
+    var v = r
+    for (var i = 0; i < parts.length; i++) { v = v == null ? undefined : v[parts[i]] }
+    return typeof v === 'number' ? v : null
+  }
+
+  function buildExpField() {
+    var sel = $('#expField')
+    sel.innerHTML = ''
+    var pref = ['score', 'bpm', 'value']
+    var def = EXP.numKeys[0]
+    for (var i = 0; i < pref.length; i++) { if (EXP.numKeys.indexOf(pref[i]) >= 0) { def = pref[i]; break } }
+    EXP.numKeys.forEach(function (k) {
+      var o = document.createElement('option')
+      o.value = k
+      o.textContent = k
+      if (k === def) o.selected = true
+      sel.appendChild(o)
+    })
+  }
+
+  function renderExpChart() {
+    if (!EXP || !EXP.xKey || !EXP.numKeys.length) return
+    var recs = EXP.records
+    var capped = false
+    if (recs.length > 2000) { recs = recs.slice(-2000); capped = true }
+    var field = $('#expField').value
+    var labels = recs.map(function (r) {
+      var v = r[EXP.xKey]
+      if (typeof v !== 'string') return ''
+      return v.length > 10 ? v.replace('T', ' ').slice(5, 16) : v
+    })
+    var vals = recs.map(function (r) { return getVal(r, field) })
+    var n = 0, sum = 0, min = Infinity, max = -Infinity
+    vals.forEach(function (v) { if (v != null) { n++; sum += v; if (v < min) min = v; if (v > max) max = v } })
+    $('#expStats').textContent = n
+      ? field + '：' + n + ' 点' + (capped ? '（仅绘最近 2000 点）' : '') + ' · 均值 ' + (sum / n).toFixed(1) + ' · 范围 ' + min + '–' + max
+      : field + '：无数值点'
+    if (expChart) expChart.destroy()
+    var cs = getComputedStyle(document.documentElement)
+    var gridColor = (cs.getPropertyValue('--chart-grid') || '#1c1c1c').trim()
+    var tickColor = (cs.getPropertyValue('--chart-tick') || '#666').trim()
+    expChart = new Chart($('#expChart'), {
+      type: 'line',
+      data: { labels: labels, datasets: [{ label: field, data: vals, borderColor: '#0070f3', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: true, fill: false }] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 0 } },
+                  y: { grid: { color: gridColor }, ticks: { color: tickColor } } },
+        plugins: { legend: { display: false } } },
+    })
+  }
+
+  function setExpView(v) {
+    var chartable = EXP && EXP.records.length && EXP.xKey && EXP.numKeys.length
+    var isC = v === 'chart' && chartable
+    $('#expViewChart').classList.toggle('active', isC)
+    $('#expViewRaw').classList.toggle('active', !isC)
+    $('#expChartBox').style.display = isC ? 'block' : 'none'
+    $('#expField').style.display = isC ? '' : 'none'
+    $('#out').style.display = isC ? 'none' : 'block'
+    if (isC) renderExpChart()
+  }
+  $('#expViewChart').onclick = function () { setExpView('chart') }
+  $('#expViewRaw').onclick = function () { setExpView('raw') }
+  $('#expField').onchange = function () { renderExpChart() }
+
   $('#explore').onclick = function () {
     var ep = epSel.value
     var q = []
     if ($('#d1').value) q.push('start_date=' + $('#d1').value)
     if ($('#d2').value) q.push('end_date=' + $('#d2').value)
     $('#out').textContent = '加载中…'
+    $('#expResultBar').style.display = ''
     api('/api/data/' + UID + '/' + ep + (q.length ? '?' + q.join('&') : ''))
-      .then(function (d) { $('#out').textContent = JSON.stringify(d, null, 2) })
-      .catch(function (e) { $('#out').textContent = '错误: ' + e.message })
+      .then(function (d) {
+        $('#out').textContent = JSON.stringify(d, null, 2)
+        EXP = parseExplorerData(d)
+        buildExpField()
+        setExpView(EXP.records.length && EXP.xKey && EXP.numKeys.length ? 'chart' : 'raw')
+      })
+      .catch(function (e) {
+        EXP = null
+        $('#out').textContent = '错误: ' + e.message
+        setExpView('raw')
+      })
   }
 }
 init()
