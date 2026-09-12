@@ -146,10 +146,12 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .mcard-detail { display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:12px }
 .mcard.open .mcard-detail { display:block }
 .narrative { font-size:13px; color:var(--fg-muted); margin:0 0 14px; line-height:1.7 }
-.pillbars { display:flex; align-items:flex-end; gap:4px; height:150px; overflow-x:auto; padding-bottom:2px }
-.pillbar { flex:1 0 8px; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+.pillbars { display:flex; align-items:flex-end; gap:3px; height:150px; overflow-x:auto; padding-bottom:2px;
+  scrollbar-width:none }
+.pillbars::-webkit-scrollbar { display:none }
+.pillbar { flex:1 0 6px; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
   gap:6px; min-width:0 }
-.pillbar .bar { width:100%; max-width:12px; min-width:4px; border-radius:999px; background:var(--fg); opacity:.92 }
+.pillbar .bar { width:100%; max-width:12px; min-width:3px; border-radius:999px; background:var(--fg); opacity:.92 }
 .pillbar.empty .bar { background:var(--border-strong); opacity:1 }
 .pillbar .lbl { font-size:11px; color:var(--fg-subtle) }
 .tabbar { display:none; position:fixed; bottom:14px; left:0; right:0; margin:0 auto; width:max-content; z-index:60;
