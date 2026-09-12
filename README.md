@@ -11,6 +11,8 @@
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-5c6bc0)](https://modelcontextprotocol.io)
 
+<a href="https://deploy.workers.cloudflare.com/?url=https://github.com/wenyuanw/oura-worker"><img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare" width="220"></a>
+
 **[🇨🇳 中文说明](#-快速开始)** · [Oura API v2 官方文档](https://cloud.ouraring.com/v2/docs)
 
 </div>
@@ -39,7 +41,19 @@
 - 一个 [Oura 账号](https://ouraring.com)和 Oura Ring
 - 本机安装 [Node.js](https://nodejs.org) ≥ 18 和 Git
 
-### 1. 获取代码并安装依赖
+### 方式 A：一键部署（推荐新手）
+
+1. 点击顶部 **Deploy to Cloudflare** 按钮（要求仓库为 public 或已授权 Cloudflare 访问）
+2. 使用 GitHub 登录并选择你的 Cloudflare 账号，向导会自动复制本仓库、创建所需的 KV 资源并完成首次部署——全程无需本地环境
+3. 部署完成后，打开该 Worker 的 **Settings → Variables and Secrets**，添加三个 **Secret** 类型变量：
+   - `OURA_CLIENT_ID` 与 `OURA_CLIENT_SECRET`（按下方第 6 步创建 Oura 应用后获得）
+   - `ADMIN_KEY`（自定义管理密钥，例如用 `openssl rand -hex 16` 生成）
+4. 继续完成下方 **第 6 步**（创建 Oura 应用并设置回调）和 **第 7 步**（连接戒指）
+5. 之后每次向你的仓库 `git push`，Cloudflare 会自动重新部署
+
+### 方式 B：命令行部署
+
+#### 1. 获取代码并安装依赖
 
 ```bash
 git clone https://github.com/wenyuanw/oura-worker.git
@@ -47,7 +61,7 @@ cd oura-worker
 npm install
 ```
 
-### 2. 登录 Cloudflare
+#### 2. 登录 Cloudflare
 
 ```bash
 npx wrangler login
@@ -55,7 +69,7 @@ npx wrangler login
 
 浏览器会弹出 Cloudflare 授权页，点击 **Allow**。
 
-### 3. 创建 KV 存储并填入配置
+#### 3. 创建 KV 存储并填入配置
 
 ```bash
 npm run kv:create
@@ -63,7 +77,7 @@ npm run kv:create
 
 命令会输出一个 `id = "xxxx"`，把它填进 [wrangler.toml](wrangler.toml) 的 `kv_namespaces.id`（文件里有注释提示）。
 
-### 4. 部署
+#### 4. 部署
 
 ```bash
 npm run deploy
@@ -71,7 +85,7 @@ npm run deploy
 
 完成后记下 Worker 域名，形如 `https://oura-service.<你的子域>.workers.dev`。
 
-### 5. 配置三个密钥（Secrets）
+#### 5. 配置三个密钥（Secrets）
 
 ```bash
 npx wrangler secret put OURA_CLIENT_ID      # 下一步创建 Oura 应用后获得
