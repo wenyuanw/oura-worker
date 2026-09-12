@@ -1,5 +1,19 @@
 {
   "name": "oura-worker",
+  "description": "Oura Ring 多用户数据服务：Cloudflare Workers + 数据看板 + MCP 服务器",
+  "license": "MIT",
+  "author": "wenyuanw",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wenyuanw/oura-worker.git"
+  },
+  "keywords": [
+    "oura",
+    "cloudflare-workers",
+    "mcp",
+    "health-dashboard",
+    "hono"
+  ],
   "private": true,
   "type": "module",
   "engines": {

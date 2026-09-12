@@ -2,3 +2,5 @@ node_modules/
 .wrangler/
 .dev.vars
 dist/
+# 本地个人配置（含真实 KV id / 域名等），不要提交
+wrangler.local.toml

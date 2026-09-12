@@ -4,7 +4,9 @@ compatibility_date = "2025-08-01"
 
 [[kv_namespaces]]
 binding = "OURA_KV"
-id = "5820011a916043cd979863514841d623"
+# ← 部署前替换为你自己的 KV id：运行 `npm run kv:create`，把输出中的 id 填到这里
+# 本地 `npm run dev` 使用模拟 KV，此占位 id 无影响
+id = "REPLACE_WITH_YOUR_KV_ID"
 
 [vars]
 # 请求的 Oura OAuth scope（空格分隔）
