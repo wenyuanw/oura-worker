@@ -117,6 +117,43 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .modal-desc { font-size:13px; color:var(--fg-muted); margin:0 0 12px }
 .invite-input { flex:1; min-width:0; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
   color:var(--fg-muted) }
+
+/* ---- 移动端 App 式布局 ---- */
+#mobHome { display:none }
+.circle-row { display:flex; gap:16px; overflow-x:auto; padding:2px 2px 14px; scrollbar-width:none }
+.circle-row::-webkit-scrollbar { display:none }
+.circle-item { flex:none; display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer }
+.circle { width:76px; height:76px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface);
+  display:flex; align-items:center; justify-content:center; transition:transform .15s }
+.circle-item:active .circle { transform:scale(.94) }
+.cval { font-size:24px; font-weight:600; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums }
+.clabel { font-size:12px; color:var(--fg-muted) }
+.mcard { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px;
+  margin-bottom:12px; cursor:pointer }
+.mcard-head { display:flex; align-items:center; gap:8px }
+.mcard-name { font-weight:600; font-size:14px }
+.mcard-date { margin-left:auto; color:var(--fg-subtle); font-size:12px }
+.mcard .chev { color:var(--fg-subtle); transition:transform .2s; font-size:16px }
+.mcard.open .chev { transform:rotate(90deg) }
+.mcard-body { display:flex; align-items:flex-end; justify-content:space-between; margin-top:10px; gap:12px }
+.mcard-val .sub { font-size:12px; color:var(--fg-subtle) }
+.mcard-val .big { font-size:36px; font-weight:600; line-height:1.15;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
+.mcard-detail { display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:12px }
+.mcard.open .mcard-detail { display:block }
+.narrative { font-size:13px; color:var(--fg-muted); margin:0 0 14px; line-height:1.7 }
+.pillbars { display:flex; align-items:flex-end; gap:6px; height:150px }
+.pillbar { flex:1; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px }
+.pillbar .bar { width:10px; border-radius:999px; background:var(--fg); opacity:.92 }
+.pillbar.empty .bar { background:var(--border-strong); opacity:1 }
+.pillbar .lbl { font-size:11px; color:var(--fg-subtle) }
+.tabbar { display:none; position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:60;
+  background:var(--surface-2); border:1px solid var(--border-strong); border-radius:999px; padding:6px; gap:4px;
+  box-shadow:var(--shadow-menu) }
+.tabbar button { border:none; background:transparent; border-radius:999px; padding:8px 18px; font-size:13px;
+  color:var(--fg-muted) }
+.tabbar button.active { background:var(--border-strong); color:var(--fg) }
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
 .subtle { color:var(--fg-subtle) }
@@ -162,7 +199,9 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 
 /* ---- 移动端 ---- */
 @media (max-width: 720px) {
-  .wrap { padding:16px 12px 64px }
+  .wrap { padding:16px 12px 110px }
+  .grid { display:none }
+  .tabbar { display:flex }
   .panel { padding:14px }
   .toolbar { justify-content:stretch }
   .toolbar .seg { flex:1 }
@@ -282,6 +321,10 @@ export function dashboardPage(): string {
   </div>
 
   <div id="app">
+    <div id="mobHome">
+      <div class="circle-row" id="circleRow"></div>
+      <div id="mobCards"></div>
+    </div>
     <div class="toolbar">
       <div class="seg" id="rangeSeg">
         <button class="range" data-days="7">7 天</button>
@@ -292,7 +335,7 @@ export function dashboardPage(): string {
 
     <div class="grid" id="stats"></div>
 
-    <div class="charts">
+    <div class="charts" id="chartsWrap">
       <div class="panel">
         <h2>睡眠 / 恢复度 / 活动</h2>
         <p class="desc">每日综合评分（0–100）· 滚轮缩放 · 拖动平移 · 双击复位</p>
@@ -312,7 +355,7 @@ export function dashboardPage(): string {
       <p class="subtle" id="chartmsg" style="display:none;margin-top:12px">Chart.js CDN 不可用，仅显示明细表。</p>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="explorerPanel">
       <h2>原始数据探索器</h2>
       <p class="desc">直接查询 Oura v2 任意端点 · 图表可缩放（滚轮/双指、拖动平移、双击复位）· 可切原始数据</p>
       <div class="row explorer-controls">
@@ -337,6 +380,11 @@ export function dashboardPage(): string {
   </div>
 </div>
 
+<nav class="tabbar" id="tabbar">
+  <button class="active" data-tab="home">摘要</button>
+  <button data-tab="trend">趋势</button>
+  <button data-tab="explore">探索</button>
+</nav>
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <div class="modal-head">
@@ -475,12 +523,101 @@ function renderCharts(rows) {
   $('#c2').ondblclick = function () { if (C2) C2.resetZoom() }
 }
 
+var METRICS = [
+  { key: 'sleep', name: '睡眠评分', color: PALETTE.sleep },
+  { key: 'readiness', name: '恢复度', color: PALETTE.readiness },
+  { key: 'activity', name: '活动', color: PALETTE.activity },
+  { key: 'rhr', name: '静息心率', color: PALETTE.rhr },
+  { key: 'hrv', name: 'HRV 平衡', color: PALETTE.hrv },
+]
+
+function weekdayCN(iso) {
+  var d = new Date(iso + 'T00:00:00Z')
+  return isNaN(d) ? '' : '日一二三四五六'.charAt(d.getUTCDay())
+}
+
+function sparkSVG(vals, color) {
+  var pts = [], min = Infinity, max = -Infinity, i, v
+  for (i = 0; i < vals.length; i++) { v = vals[i]; if (v == null) continue; if (v < min) min = v; if (v > max) max = v }
+  if (!isFinite(min) || min === max) return ''
+  for (i = 0; i < vals.length; i++) {
+    v = vals[i]
+    if (v == null) continue
+    var x = 2 + (i / (vals.length - 1 || 1)) * 86
+    var y = 32 - ((v - min) / (max - min)) * 26
+    pts.push([x, y])
+  }
+  if (pts.length < 2) return ''
+  var pl = pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1) }).join(' ')
+  var last = pts[pts.length - 1]
+  return '<svg width="90" height="36" viewBox="0 0 90 36"><polyline points="' + pl + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3" fill="' + color + '"/></svg>'
+}
+
+function toggleCard(card, forceOpen) {
+  var open = forceOpen === true ? true : !card.classList.contains('open')
+  Array.prototype.forEach.call(document.querySelectorAll('.mcard'), function (c) { c.classList.remove('open') })
+  if (open) card.classList.add('open')
+}
+
+function renderMobile(rows) {
+  var home = $('#mobHome')
+  if (!home) return
+  var circles = ''
+  var cards = ''
+  METRICS.forEach(function (m) {
+    var lastRow = null, i, r
+    for (i = rows.length - 1; i >= 0; i--) { if (rows[i][m.key] != null) { lastRow = rows[i]; break } }
+    var latest = lastRow ? lastRow[m.key] : '—'
+    circles += '<div class="circle-item" data-key="' + m.key + '"><div class="circle" style="border-color:' + m.color + '"><span class="cval">' + latest + '</span></div><div class="clabel">' + m.name + '</div></div>'
+    var sparkVals = rows.slice(-7).map(function (r) { return r[m.key] })
+    var inRange = rows.filter(function (r) { return r[m.key] != null })
+    var avg = 0, mx = -Infinity, mn = Infinity, mxD = '', mnD = ''
+    inRange.forEach(function (r) {
+      var v = r[m.key]
+      avg += v
+      if (v > mx) { mx = v; mxD = r.date }
+      if (v < mn) { mn = v; mnD = r.date }
+    })
+    avg = inRange.length ? (avg / inRange.length).toFixed(1) : '—'
+    var narrative = inRange.length
+      ? '最近 ' + inRange.length + ' 天平均 ' + avg + '，最高 ' + mx + '（' + mxD.slice(5) + '）、最低 ' + mn + '（' + mnD.slice(5) + '）。'
+      : '暂无数据。'
+    var bmin = Infinity, bmax = -Infinity
+    inRange.forEach(function (r) { var v = r[m.key]; if (v < bmin) bmin = v; if (v > bmax) bmax = v })
+    var bars = ''
+    rows.forEach(function (r) {
+      var v = r[m.key]
+      var h = v == null ? 4 : Math.max(6, Math.round(((v - bmin) / ((bmax - bmin) || 1)) * 100))
+      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + r.date + (v == null ? '' : '：' + v) + '"><div class="bar" style="height:' + h + '%"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
+    })
+    cards += '<div class="mcard" data-key="' + m.key + '">' +
+      '<div class="mcard-head"><span class="dot" style="background:' + m.color + '"></span><span class="mcard-name">' + m.name + '</span><span class="mcard-date">' + (lastRow ? lastRow.date.slice(5) : '') + '</span><span class="chev">›</span></div>' +
+      '<div class="mcard-body"><div class="mcard-val"><div class="sub">最新</div><div class="big">' + latest + '</div></div>' + (sparkSVG(sparkVals, m.color) || '') + '</div>' +
+      '<div class="mcard-detail"><p class="narrative">' + narrative + '</p><div class="pillbars">' + bars + '</div></div>' +
+      '</div>'
+  })
+  $('#circleRow').innerHTML = circles
+  $('#mobCards').innerHTML = cards
+  Array.prototype.forEach.call(document.querySelectorAll('.mcard'), function (card) {
+    card.querySelector('.mcard-head').onclick = function () { toggleCard(card) }
+  })
+  Array.prototype.forEach.call(document.querySelectorAll('.circle-item'), function (c) {
+    c.onclick = function () {
+      var card = document.querySelector('.mcard[data-key="' + c.getAttribute('data-key') + '"]')
+      if (!card) return
+      toggleCard(card, true)
+      if (window.matchMedia('(max-width: 720px)').matches) card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
+}
+
 function loadAll() {
   api('/api/data/' + UID + '/summary?days=' + DAYS).then(function (d) {
     var rows = d.days || []
     renderStats(rows)
     renderCharts(rows)
     renderTable(rows)
+    renderMobile(rows)
   }).catch(function (e) {
     $('#stats').innerHTML = '<div class="card" style="color:var(--red)">加载失败: ' + e.message + '</div>'
   })
@@ -512,6 +649,34 @@ function init() {
     applyTheme(next)
     if (C1 || C2) loadAll()
   }
+
+  var mobTab = 'home'
+  function applyMobTab(t) {
+    mobTab = t
+    var mobile = window.matchMedia('(max-width: 720px)').matches
+    var home = $('#mobHome'), chartsW = $('#chartsWrap'), explorer = $('#explorerPanel'), toolbar = document.querySelector('.toolbar')
+    if (!mobile) {
+      if (home) home.style.display = ''
+      if (chartsW) chartsW.style.display = ''
+      if (explorer) explorer.style.display = ''
+      if (toolbar) toolbar.style.display = ''
+      return
+    }
+    if (home) home.style.display = t === 'home' ? '' : 'none'
+    if (chartsW) chartsW.style.display = t === 'trend' ? '' : 'none'
+    if (toolbar) toolbar.style.display = t === 'trend' ? '' : 'none'
+    if (explorer) explorer.style.display = t === 'explore' ? '' : 'none'
+    if (t === 'trend') { setTimeout(function () { try { if (C1) C1.resize(); if (C2) C2.resize() } catch (e) {} }, 60) }
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function (x) { x.classList.remove('active') })
+      b.classList.add('active')
+      applyMobTab(b.getAttribute('data-tab'))
+    }
+  })
+  window.addEventListener('resize', function () { applyMobTab(mobTab) })
+  applyMobTab('home')
 
   function setCurrent(uid) {
     UID = uid
