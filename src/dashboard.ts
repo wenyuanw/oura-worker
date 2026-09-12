@@ -148,12 +148,22 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .pillbar .bar { width:10px; border-radius:999px; background:var(--fg); opacity:.92 }
 .pillbar.empty .bar { background:var(--border-strong); opacity:1 }
 .pillbar .lbl { font-size:11px; color:var(--fg-subtle) }
-.tabbar { display:none; position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:60;
+.tabbar { display:none; position:fixed; bottom:14px; left:0; right:0; margin:0 auto; width:max-content; z-index:60;
   background:var(--surface-2); border:1px solid var(--border-strong); border-radius:999px; padding:6px; gap:4px;
   box-shadow:var(--shadow-menu) }
-.tabbar button { border:none; background:transparent; border-radius:999px; padding:8px 16px; font-size:13px;
-  color:var(--fg-muted); white-space:nowrap; flex:1 }
-.tabbar button.active { background:var(--border-strong); color:var(--fg) }
+.tab-ind { position:absolute; top:6px; bottom:6px; left:6px; width:60px; border-radius:999px;
+  background:var(--border-strong);
+  transition:transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1) }
+.tabbar button { position:relative; z-index:1; border:none; background:transparent; border-radius:999px;
+  padding:8px 16px; font-size:13px; color:var(--fg-muted); white-space:nowrap; flex:1;
+  transition:color .2s; touch-action:manipulation }
+.tabbar button.active { color:var(--fg) }
+@keyframes tabIn { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
+.tab-anim { animation:tabIn .28s cubic-bezier(.2,0,.2,1) }
+@media (prefers-reduced-motion: reduce) {
+  .tab-anim { animation:none }
+  .tab-ind { transition:none }
+}
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
 .subtle { color:var(--fg-subtle) }
@@ -382,6 +392,7 @@ export function dashboardPage(): string {
 </div>
 
 <nav class="tabbar" id="tabbar">
+  <div class="tab-ind"></div>
   <button class="active" data-tab="home">摘要</button>
   <button data-tab="trend">趋势</button>
   <button data-tab="explore">探索</button>
@@ -652,6 +663,16 @@ function init() {
   }
 
   var mobTab = 'home'
+  function moveInd() {
+    var ind = document.querySelector('.tab-ind')
+    var bar = document.getElementById('tabbar')
+    var btn = document.querySelector('#tabbar button.active')
+    if (!ind || !bar || !btn) return
+    var br = bar.getBoundingClientRect(), b = btn.getBoundingClientRect()
+    if (!b.width) return
+    ind.style.width = b.width + 'px'
+    ind.style.transform = 'translateX(' + (b.left - br.left - 7) + 'px)'
+  }
   function applyMobTab(t) {
     mobTab = t
     var mobile = window.matchMedia('(max-width: 720px)').matches
@@ -663,10 +684,14 @@ function init() {
       if (toolbar) toolbar.style.display = ''
       return
     }
+    window.scrollTo(0, 0)
     if (home) home.style.display = t === 'home' ? '' : 'none'
     if (chartsW) chartsW.style.display = t === 'trend' ? '' : 'none'
     if (toolbar) toolbar.style.display = t === 'trend' ? '' : 'none'
     if (explorer) explorer.style.display = t === 'explore' ? '' : 'none'
+    var el = t === 'home' ? home : (t === 'trend' ? chartsW : explorer)
+    if (el) { el.classList.remove('tab-anim'); void el.offsetWidth; el.classList.add('tab-anim') }
+    moveInd()
     if (t === 'trend') { setTimeout(function () { try { if (C1) C1.resize(); if (C2) C2.resize() } catch (e) {} }, 60) }
   }
   Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function (b) {
