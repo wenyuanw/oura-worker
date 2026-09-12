@@ -408,13 +408,13 @@ function hexToRgba(hex, a) {
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'
 }
 
-function areaFill(hex) {
+function areaFill(hex, alphaTop) {
   return function (context) {
     var area = context.chart.chartArea
     if (!area) return 'transparent'
     var g = context.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom)
-    g.addColorStop(0, hexToRgba(hex, 0.25))
-    g.addColorStop(1, hexToRgba(hex, 0.02))
+    g.addColorStop(0, hexToRgba(hex, alphaTop || 0.12))
+    g.addColorStop(1, hexToRgba(hex, 0.01))
     return g
   }
 }
@@ -445,7 +445,7 @@ function renderCharts(rows) {
              y: Object.assign({ grid: { color: gridColor }, ticks: { color: tickColor } }, yOpts || {}) }
   }
   var ds = function (label, key, color) {
-    return { label: label, data: mk(key), borderColor: color, backgroundColor: areaFill(color), fill: true,
+    return { label: label, data: mk(key), borderColor: color, backgroundColor: areaFill(color, 0.1), fill: true,
       tension: 0.35, pointRadius: 0, pointHoverRadius: 4, spanGaps: true, borderWidth: 1.5 }
   }
   if (C1) C1.destroy()
@@ -705,7 +705,7 @@ function init() {
     var tickColor = (cs.getPropertyValue('--chart-tick') || '#666').trim()
     expChart = new Chart($('#expChart'), {
       type: 'line',
-      data: { labels: labels, datasets: [{ label: field, data: vals, borderColor: '#0070f3', backgroundColor: areaFill('#0070f3'), borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: true, fill: true }] },
+      data: { labels: labels, datasets: [{ label: field, data: vals, borderColor: '#0070f3', backgroundColor: areaFill('#0070f3', 0.22), borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: true, fill: true }] },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 0 } },
                   y: { grid: { color: gridColor }, ticks: { color: tickColor } } },
