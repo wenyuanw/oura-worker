@@ -42,7 +42,8 @@ export async function listUsers(env: Env): Promise<UserRecord[]> {
     if (list.list_complete) break
     cursor = list.cursor
   }
-  return users
+  // KV list 顺序不确定，按接入时间稳定排序（最早接入的排最前）
+  return users.sort((a, b) => a.connectedAt - b.connectedAt)
 }
 
 /** 缓存优先读取 Oura 数据；未命中则回源并写入 KV */
