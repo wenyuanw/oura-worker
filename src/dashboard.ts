@@ -43,7 +43,7 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .chip { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px;
   background:var(--surface-2); border:1px solid var(--border);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; color:var(--fg-muted);
-  word-break:break-all; max-width:100% }
+  word-break:break-all; max-width:100%; min-width:0 }
 
 /* ---- layout ---- */
 .topbar { position:sticky; top:0; z-index:10; backdrop-filter:blur(12px);
@@ -92,6 +92,32 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 .notice .glyph { width:30px; height:30px; margin:0 auto; border:3px solid var(--border-strong); border-radius:50% }
 .notice h2 { font-size:15px; margin:14px 0 6px }
 .notice p { color:var(--fg-muted); font-size:13px; margin:0 0 16px }
+
+/* ---- 图表容器：固定高度，避免窄屏下按比例压扁 ---- */
+.chart-box { position:relative; height:230px }
+
+/* ---- 移动端 ---- */
+@media (max-width: 720px) {
+  .topbar-inner { height:auto; padding:10px 12px; row-gap:10px }
+  .brand { flex-basis:100%; margin-right:0 }
+  .topbar-inner select { flex:1 1 auto; min-width:0 }
+  .topbar-inner button { padding:0 10px }
+  .wrap { padding:16px 12px 64px }
+  .panel { padding:14px }
+  .panel.row { gap:8px }
+  .panel.row > .subtle { flex-basis:100% }
+  .chip { flex:1 1 auto }
+  .seg { flex:1 1 100% }
+  .seg button { flex:1 }
+  .grid { grid-template-columns:repeat(2,1fr); gap:10px }
+  .grid .stat:last-child { grid-column:1 / -1 }
+  .stat .value { font-size:24px }
+  .chart-box { height:190px }
+  .explorer-controls select { flex:1 1 100% }
+  .explorer-controls input[type=date] { flex:1 1 40%; min-width:0 }
+  .login { margin-top:9vh; padding:24px 20px }
+  .notice { padding:28px 16px }
+}
 `
 
 function esc(s: string): string {
@@ -105,6 +131,7 @@ function shell(title: string, body: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
 <title>${esc(title)}</title>
 <style>${BASE_CSS}</style>
 </head>
@@ -193,12 +220,12 @@ export function dashboardPage(): string {
       <div class="panel">
         <h2>睡眠 / 恢复度 / 活动</h2>
         <p class="desc">每日综合评分（0–100）</p>
-        <canvas id="c1" height="120"></canvas>
+        <div class="chart-box"><canvas id="c1"></canvas></div>
       </div>
       <div class="panel">
         <h2>静息心率 / HRV 平衡</h2>
         <p class="desc">来自恢复度贡献因子</p>
-        <canvas id="c2" height="120"></canvas>
+        <div class="chart-box"><canvas id="c2"></canvas></div>
       </div>
     </div>
 
@@ -212,7 +239,7 @@ export function dashboardPage(): string {
     <div class="panel">
       <h2>原始数据探索器</h2>
       <p class="desc">直接查询 Oura v2 任意端点</p>
-      <div class="row">
+      <div class="row explorer-controls">
         <select id="ep"></select>
         <input type="date" id="d1">
         <input type="date" id="d2">
@@ -284,7 +311,7 @@ function renderCharts(rows) {
       Object.assign({ label: '恢复度', data: mk('readiness'), borderColor: PALETTE.readiness }, base),
       Object.assign({ label: '活动', data: mk('activity'), borderColor: PALETTE.activity }, base),
     ] },
-    options: { responsive: true, interaction: { mode: 'index', intersect: false },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor } },
                 y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: tickColor } } },
       plugins: legendOpt },
@@ -295,7 +322,7 @@ function renderCharts(rows) {
       Object.assign({ label: '静息心率', data: mk('rhr'), borderColor: PALETTE.rhr }, base),
       Object.assign({ label: 'HRV 平衡', data: mk('hrv'), borderColor: PALETTE.hrv }, base),
     ] },
-    options: { responsive: true, interaction: { mode: 'index', intersect: false },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor } },
                 y: { grid: { color: gridColor }, ticks: { color: tickColor } } },
       plugins: legendOpt },
