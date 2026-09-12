@@ -28,7 +28,7 @@ const BASE_CSS = `
 }
 * { box-sizing: border-box }
 html { background: var(--bg) }
-body { margin:0; background:var(--bg); color:var(--fg);
+body { margin:0; background:var(--bg); color:var(--fg); transition:background-color .3s ease, color .3s ease;
   font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,"PingFang SC","Microsoft YaHei",sans-serif;
   letter-spacing:-0.01em; -webkit-font-smoothing:antialiased }
 code, pre, .mono { font-family:ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace; letter-spacing:0 }
@@ -44,8 +44,9 @@ a:hover { color:var(--fg-muted) }
 button, .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px;
   height:32px; padding:0 14px; border-radius:6px; font-size:13px; font-weight:500;
   background:var(--surface-2); border:1px solid var(--border-strong); color:var(--fg);
-  cursor:pointer; transition:border-color .15s, background .15s, color .15s; text-decoration:none }
+  cursor:pointer; transition:border-color .15s, background .15s, color .15s, transform .1s; text-decoration:none }
 button:hover, .btn:hover { background:var(--hover-bg); border-color:var(--hover-border) }
+button:active { transform:scale(.97) }
 button.primary { background:var(--fg); color:var(--primary-fg); border-color:var(--fg) }
 button.primary:hover { background:var(--primary-hover-bg); border-color:var(--primary-hover-bg) }
 button.danger { color:var(--red) }
@@ -158,11 +159,39 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
   padding:8px 16px; font-size:13px; color:var(--fg-muted); white-space:nowrap; flex:1;
   transition:color .2s; touch-action:manipulation }
 .tabbar button.active { color:var(--fg) }
+
+/* ---- 交互动效 ---- */
+@keyframes fadeInUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } }
+@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+@keyframes modalIn { from { opacity:0; transform:translateY(10px) scale(.97) } to { opacity:1; transform:none } }
+@keyframes menuIn { from { opacity:0; transform:translateY(-6px) scale(.98) } to { opacity:1; transform:none } }
+@keyframes growBar { from { transform:scaleY(0) } }
+@media (min-width: 721px) {
+  #app > * { animation:fadeInUp .45s ease backwards }
+  #app > *:nth-child(2) { animation-delay:.05s }
+  #app > *:nth-child(3) { animation-delay:.1s }
+  #app > *:nth-child(4) { animation-delay:.15s }
+  #app > *:nth-child(5) { animation-delay:.2s }
+  .grid .card:hover { transform:translateY(-2px); border-color:var(--hover-border) }
+}
+.grid .card { transition:transform .2s ease, border-color .2s ease, background-color .3s ease }
+.panel, .topbar, .chip, pre, select, input, .mcard { transition:background-color .3s ease, border-color .3s ease, color .3s ease }
+.circle-item .circle { transition:transform .15s ease, border-color .3s ease }
+@media (hover: hover) { .circle-item:hover .circle { transform:translateY(-2px) } }
+@media (hover: hover) { .mcard:hover { border-color:var(--hover-border) } }
+.login { animation:fadeInUp .5s ease }
+.menu.open { animation:menuIn .18s cubic-bezier(.2,0,.2,1); transform-origin:top right }
+.modal-overlay.open { animation:fadeIn .2s ease }
+.modal-overlay.open .modal { animation:modalIn .25s cubic-bezier(.2,0,.2,1) }
+.pillbar .bar { transform-origin:bottom }
+.mcard.open .pillbar .bar { animation:growBar .45s cubic-bezier(.2,0,.2,1) backwards; animation-delay:calc(var(--i, 0) * 8ms) }
 @keyframes tabIn { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
 .tab-anim { animation:tabIn .28s cubic-bezier(.2,0,.2,1) }
 @media (prefers-reduced-motion: reduce) {
   .tab-anim { animation:none }
   .tab-ind { transition:none }
+  #app > *, .menu.open, .modal-overlay.open, .modal-overlay.open .modal, .mcard.open .pillbar .bar, .login { animation:none }
+  *, *::before, *::after { transition-duration:.01ms !important; animation-duration:.01ms !important }
 }
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
@@ -597,10 +626,10 @@ function renderMobile(rows) {
     var bmin = Infinity, bmax = -Infinity
     inRange.forEach(function (r) { var v = r[m.key]; if (v < bmin) bmin = v; if (v > bmax) bmax = v })
     var bars = ''
-    rows.forEach(function (r) {
+    rows.forEach(function (r, idx) {
       var v = r[m.key]
       var h = v == null ? 4 : Math.max(6, Math.round(((v - bmin) / ((bmax - bmin) || 1)) * 100))
-      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + r.date + (v == null ? '' : '：' + v) + '"><div class="bar" style="height:' + h + '%"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
+      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + r.date + (v == null ? '' : '：' + v) + '"><div class="bar" style="height:' + h + '%;--i:' + idx + '"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
     })
     cards += '<div class="mcard" data-key="' + m.key + '">' +
       '<div class="mcard-head"><span class="dot" style="background:' + m.color + '"></span><span class="mcard-name">' + m.name + '</span><span class="mcard-date">' + (lastRow ? lastRow.date.slice(5) : '') + '</span><span class="chev">›</span></div>' +
