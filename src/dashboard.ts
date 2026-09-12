@@ -8,6 +8,7 @@ const BASE_CSS = `
   --primary-fg: #000; --primary-hover-bg: #fff;
   --chart-grid: #1c1c1c; --chart-tick: #666; --legend-text: #a1a1a1;
   --shadow-menu: 0 12px 32px rgba(0,0,0,.55); --shadow-modal: 0 24px 64px rgba(0,0,0,.6);
+  --tip-bg: rgba(17,17,17,.96); --tip-border: #333;
   --scroll-thumb: #333;
   --accent: #0070f3; --red: #ee0000; --green: #50e3c2; --amber: #f5a623; --purple: #7928ca;
   color-scheme: dark;
@@ -21,6 +22,7 @@ const BASE_CSS = `
   --primary-fg: #fff; --primary-hover-bg: #383838;
   --chart-grid: #eaeaea; --chart-tick: #999; --legend-text: #666;
   --shadow-menu: 0 12px 32px rgba(0,0,0,.12); --shadow-modal: 0 24px 64px rgba(0,0,0,.18);
+  --tip-bg: rgba(255,255,255,.98); --tip-border: #d4d4d4;
   --scroll-thumb: #ccc;
   color-scheme: light;
 }
@@ -293,12 +295,12 @@ export function dashboardPage(): string {
     <div class="charts">
       <div class="panel">
         <h2>睡眠 / 恢复度 / 活动</h2>
-        <p class="desc">每日综合评分（0–100）</p>
+        <p class="desc">每日综合评分（0–100）· 滚轮缩放 · 拖动平移 · 双击复位</p>
         <div class="chart-box"><canvas id="c1"></canvas></div>
       </div>
       <div class="panel">
         <h2>静息心率 / HRV 平衡</h2>
-        <p class="desc">来自恢复度贡献因子</p>
+        <p class="desc">来自恢复度贡献因子 · 滚轮缩放 · 拖动平移 · 双击复位</p>
         <div class="chart-box"><canvas id="c2"></canvas></div>
       </div>
     </div>
@@ -312,7 +314,7 @@ export function dashboardPage(): string {
 
     <div class="panel">
       <h2>原始数据探索器</h2>
-      <p class="desc">直接查询 Oura v2 任意端点，支持图表与原始数据两种视图</p>
+      <p class="desc">直接查询 Oura v2 任意端点 · 图表可缩放（滚轮/双指、拖动平移、双击复位）· 可切原始数据</p>
       <div class="row explorer-controls">
         <select id="ep"></select>
         <input type="date" id="d1">
@@ -353,6 +355,8 @@ export function dashboardPage(): string {
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-crosshair@2.0.0/dist/chartjs-plugin-crosshair.min.js"></script>
 <script>
 var $ = function (s) { return document.querySelector(s) }
 var USERS = [], UID = '', DAYS = 30, C1 = null, C2 = null
@@ -398,40 +402,77 @@ function renderTable(rows) {
   if (typeof Chart === 'undefined') $('#tablePanel').style.display = 'block'
 }
 
+function hexToRgba(hex, a) {
+  var h = hex.replace('#', '')
+  var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16)
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'
+}
+
+function areaFill(hex) {
+  return function (context) {
+    var area = context.chart.chartArea
+    if (!area) return 'transparent'
+    var g = context.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom)
+    g.addColorStop(0, hexToRgba(hex, 0.25))
+    g.addColorStop(1, hexToRgba(hex, 0.02))
+    return g
+  }
+}
+
 function renderCharts(rows) {
   if (typeof Chart === 'undefined') { $('#chartmsg').style.display = 'block'; $('#tablePanel').style.display = 'block'; return }
   var labels = rows.map(function (r) { return r.date.slice(5) })
+  var fullLabels = rows.map(function (r) { return r.date })
   var mk = function (key) { return rows.map(function (r) { return r[key] == null ? null : r[key] }) }
-  var base = { fill: false, tension: 0.35, pointRadius: 0, pointHoverRadius: 4, spanGaps: true, borderWidth: 1.5 }
   var cs = getComputedStyle(document.documentElement)
   var gridColor = (cs.getPropertyValue('--chart-grid') || '#1c1c1c').trim()
   var tickColor = (cs.getPropertyValue('--chart-tick') || '#666').trim()
+  var tipBg = (cs.getPropertyValue('--tip-bg') || '#111').trim()
+  var tipBorder = (cs.getPropertyValue('--tip-border') || '#333').trim()
+  var tipFg = (cs.getPropertyValue('--fg') || '#ededed').trim()
   var legendOpt = { legend: { labels: { color: (cs.getPropertyValue('--legend-text') || '#a1a1a1').trim(), boxWidth: 12, boxHeight: 2, font: { size: 11 } } } }
+  var tip = { backgroundColor: tipBg, titleColor: tipFg, bodyColor: tipFg, borderColor: tipBorder, borderWidth: 1,
+    padding: 10, cornerRadius: 8, displayColors: true, boxWidth: 8, boxHeight: 8, titleFont: { weight: '600' },
+    callbacks: { title: function (items) { return fullLabels[items[0].dataIndex] || items[0].label } } }
+  var interact = { mode: 'index', intersect: false }
+  var zoomOpt = { pan: { enabled: true, mode: 'x' },
+    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+    limits: { x: { min: 'original', max: 'original' } } }
+  var crossOpt = { line: { color: tickColor, width: 1, dashPattern: [3, 3] }, snap: { enabled: true },
+    sync: { enabled: false }, zoom: { enabled: false } }
+  var scales = function (yOpts) {
+    return { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 0 } },
+             y: Object.assign({ grid: { color: gridColor }, ticks: { color: tickColor } }, yOpts || {}) }
+  }
+  var ds = function (label, key, color) {
+    return { label: label, data: mk(key), borderColor: color, backgroundColor: areaFill(color), fill: true,
+      tension: 0.35, pointRadius: 0, pointHoverRadius: 4, spanGaps: true, borderWidth: 1.5 }
+  }
   if (C1) C1.destroy()
   if (C2) C2.destroy()
   C1 = new Chart($('#c1'), {
     type: 'line',
     data: { labels: labels, datasets: [
-      Object.assign({ label: '睡眠', data: mk('sleep'), borderColor: PALETTE.sleep }, base),
-      Object.assign({ label: '恢复度', data: mk('readiness'), borderColor: PALETTE.readiness }, base),
-      Object.assign({ label: '活动', data: mk('activity'), borderColor: PALETTE.activity }, base),
+      ds('睡眠', 'sleep', PALETTE.sleep),
+      ds('恢复度', 'readiness', PALETTE.readiness),
+      ds('活动', 'activity', PALETTE.activity),
     ] },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor } },
-                y: { min: 0, max: 100, grid: { color: gridColor }, ticks: { color: tickColor } } },
-      plugins: legendOpt },
+    options: { responsive: true, maintainAspectRatio: false, interaction: interact,
+      scales: scales({ min: 0, max: 100 }),
+      plugins: { legend: legendOpt.legend, tooltip: tip, zoom: zoomOpt, crosshair: crossOpt } },
   })
   C2 = new Chart($('#c2'), {
     type: 'line',
     data: { labels: labels, datasets: [
-      Object.assign({ label: '静息心率', data: mk('rhr'), borderColor: PALETTE.rhr }, base),
-      Object.assign({ label: 'HRV 平衡', data: mk('hrv'), borderColor: PALETTE.hrv }, base),
+      ds('静息心率', 'rhr', PALETTE.rhr),
+      ds('HRV 平衡', 'hrv', PALETTE.hrv),
     ] },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor } },
-                y: { grid: { color: gridColor }, ticks: { color: tickColor } } },
-      plugins: legendOpt },
+    options: { responsive: true, maintainAspectRatio: false, interaction: interact,
+      scales: scales(),
+      plugins: { legend: legendOpt.legend, tooltip: tip, zoom: zoomOpt, crosshair: crossOpt } },
   })
+  $('#c1').ondblclick = function () { if (C1) C1.resetZoom() }
+  $('#c2').ondblclick = function () { if (C2) C2.resetZoom() }
 }
 
 function loadAll() {
@@ -446,6 +487,7 @@ function loadAll() {
 }
 
 function init() {
+  try { if (window.ChartZoom) Chart.register(window.ChartZoom) } catch (e) {}
   var menu = $('#userMenu')
   function closeMenu() { menu.classList.remove('open') }
   $('#userMenuBtn').onclick = function (e) { e.stopPropagation(); menu.classList.toggle('open') }
@@ -650,6 +692,7 @@ function init() {
       if (typeof v !== 'string') return ''
       return v.length > 10 ? v.replace('T', ' ').slice(5, 16) : v
     })
+    var fullLabels = recs.map(function (r) { return String(r[EXP.xKey]) })
     var vals = recs.map(function (r) { return getVal(r, field) })
     var n = 0, sum = 0, min = Infinity, max = -Infinity
     vals.forEach(function (v) { if (v != null) { n++; sum += v; if (v < min) min = v; if (v > max) max = v } })
@@ -662,12 +705,16 @@ function init() {
     var tickColor = (cs.getPropertyValue('--chart-tick') || '#666').trim()
     expChart = new Chart($('#expChart'), {
       type: 'line',
-      data: { labels: labels, datasets: [{ label: field, data: vals, borderColor: '#0070f3', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: true, fill: false }] },
+      data: { labels: labels, datasets: [{ label: field, data: vals, borderColor: '#0070f3', backgroundColor: areaFill('#0070f3'), borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: true, fill: true }] },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 0 } },
                   y: { grid: { color: gridColor }, ticks: { color: tickColor } } },
-        plugins: { legend: { display: false } } },
+        plugins: { legend: { display: false },
+          tooltip: { backgroundColor: (cs.getPropertyValue('--tip-bg') || '#111').trim(), titleColor: (cs.getPropertyValue('--fg') || '#ededed').trim(), bodyColor: (cs.getPropertyValue('--fg') || '#ededed').trim(), borderColor: (cs.getPropertyValue('--tip-border') || '#333').trim(), borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: false, titleFont: { weight: '600' }, callbacks: { title: function (items) { return fullLabels[items[0].dataIndex] || items[0].label } } },
+          zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }, limits: { x: { min: 'original', max: 'original' } } },
+          crosshair: { line: { color: tickColor, width: 1, dashPattern: [3, 3] }, snap: { enabled: true }, sync: { enabled: false }, zoom: { enabled: false } } } },
     })
+    $('#expChart').ondblclick = function () { if (expChart) expChart.resetZoom() }
   }
 
   function setExpView(v) {
