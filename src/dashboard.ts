@@ -502,12 +502,31 @@ function init() {
     fetch('/logout', { method: 'POST' }).then(function () { location.href = '/login' })
   }
 
-  var eps = ['daily_sleep', 'daily_readiness', 'daily_activity', 'daily_stress', 'daily_resilience', 'daily_spo2', 'daily_cardiovascular_age', 'vo2_max', 'sleep', 'sleep_time', 'heartrate', 'session', 'workout', 'tag', 'enhanced_tag', 'rest_mode_period', 'ring_configuration', 'personal_info']
+  var eps = [
+    ['daily_sleep', '每日睡眠 (daily_sleep)'],
+    ['daily_readiness', '每日恢复度 (daily_readiness)'],
+    ['daily_activity', '每日活动 (daily_activity)'],
+    ['daily_stress', '每日压力 (daily_stress)'],
+    ['daily_resilience', '每日韧性 (daily_resilience)'],
+    ['daily_spo2', '每日血氧 (daily_spo2)'],
+    ['daily_cardiovascular_age', '每日心血管年龄 (daily_cardiovascular_age)'],
+    ['vo2_max', '最大摄氧量 (vo2_max)'],
+    ['sleep', '睡眠分期 (sleep)'],
+    ['sleep_time', '睡眠时段 (sleep_time)'],
+    ['heartrate', '心率 (heartrate)'],
+    ['session', '会话记录 (session)'],
+    ['workout', '锻炼 (workout)'],
+    ['tag', '标签 (tag)'],
+    ['enhanced_tag', '增强标签 (enhanced_tag)'],
+    ['rest_mode_period', '休息模式 (rest_mode_period)'],
+    ['ring_configuration', '戒指配置 (ring_configuration)'],
+    ['personal_info', '个人信息 (personal_info)'],
+  ]
   var epSel = $('#ep')
-  eps.forEach(function (e) {
+  eps.forEach(function (p) {
     var o = document.createElement('option')
-    o.value = e
-    o.textContent = e
+    o.value = p[0]
+    o.textContent = p[1]
     epSel.appendChild(o)
   })
   var d1 = new Date(Date.now() - 6 * 864e5)
