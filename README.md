@@ -80,6 +80,39 @@ curl -s -H "Authorization: Bearer $KEY" "$BASE/api/data/<userId>/summary?days=7"
 curl -s -H "Authorization: Bearer $KEY" "$BASE/api/data/<userId>/daily_sleep?start_date=2026-09-01&end_date=2026-09-12"
 ```
 
+## MCP（Model Context Protocol）
+
+Worker 同时是一个 MCP 服务器（无状态 Streamable HTTP 传输），可接入 Claude Desktop / Claude Code / 其它 MCP 客户端：
+
+```
+https://oura-service.<你的子域>.workers.dev/mcp
+```
+
+提供 3 个工具：`list_users`（列出已接入用户）、`get_daily_summary`（每日睡眠/恢复度/活动/静息心率/HRV 概览）、`get_oura_data`（查询任意 Oura 端点原始数据）。鉴权使用 `ADMIN_KEY`，支持 `Authorization: Bearer` 头或 `?key=` 查询参数。
+
+Claude Code / Claude Desktop 接入示例：
+
+```bash
+claude mcp add --transport http oura https://oura-service.xxx.workers.dev/mcp \
+  --header "Authorization: Bearer <ADMIN_KEY>"
+```
+
+或手动编辑 `claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "oura": {
+      "type": "http",
+      "url": "https://oura-service.xxx.workers.dev/mcp",
+      "headers": { "Authorization": "Bearer <ADMIN_KEY>" }
+    }
+  }
+}
+```
+
+不支持自定义请求头的客户端可用 URL 参数形式：`https://.../mcp?key=<ADMIN_KEY>`（注意避免把带 key 的 URL 泄露到日志）。
+
 ## 缓存与限流
 
 - 缓存 TTL：`daily_*`/`vo2_max` 等 15 分钟；`heartrate`/`session`/`workout`/`sleep*`/`tag` 5 分钟；`personal_info`/`ring_configuration` 1 小时

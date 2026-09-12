@@ -1,10 +1,10 @@
 import { Hono, type Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { connectedPage, dashboardPage, errorPage, loginPage } from './dashboard'
+import { fetchCached, getSummaryRows, listUsers, SUMMARY_ENDPOINTS } from './data'
 import {
   DEFAULT_SCOPE,
   ENDPOINTS,
-  OuraClient,
   OuraError,
   OURA_AUTHORIZE,
   ensureFreshToken,
@@ -13,13 +13,13 @@ import {
   getUser,
   saveUser,
 } from './oura'
+import { registerMcpRoutes } from './mcp'
 import type { Env, UserRecord } from './types'
 import { hmacHex, isoDay } from './util'
 
 const app = new Hono<{ Bindings: Env }>()
 
 const COOKIE_NAME = 'oura_admin'
-const SUMMARY_ENDPOINTS = ['daily_sleep', 'daily_readiness', 'daily_activity'] as const
 // 每个订阅占用一个 (event_type, data_type) 组合
 const WEBHOOK_DATA_TYPES = ['daily_sleep', 'daily_readiness', 'daily_activity', 'daily_stress', 'workout', 'session']
 const QUERY_ALLOW = ['start_date', 'end_date', 'next_token', 'document_id']
@@ -34,30 +34,6 @@ async function isAdmin(c: Context<{ Bindings: Env }>): Promise<boolean> {
   const auth = c.req.header('authorization')
   if (auth?.startsWith('Bearer ') && auth.slice(7) === c.env.ADMIN_KEY) return true
   return getCookie(c, COOKIE_NAME) === (await hmacHex(c.env.ADMIN_KEY, 'admin-v1'))
-}
-
-function cacheKey(userId: string, endpoint: string, params: Record<string, string>): string {
-  return `cache:${userId}:${endpoint}:${JSON.stringify(params)}`
-}
-
-/** 缓存优先读取 Oura 数据；未命中则回源并写入 KV */
-async function fetchCached(
-  env: Env,
-  rec: UserRecord,
-  endpoint: string,
-  params: Record<string, string> = {},
-): Promise<{ data: any; hit: boolean }> {
-  const spec = ENDPOINTS[endpoint]
-  if (!spec) throw new OuraError(404, `unknown endpoint: ${endpoint}`)
-  const key = cacheKey(rec.id, endpoint, params)
-  const cached = await env.OURA_KV.get(key)
-  if (cached) return { data: (JSON.parse(cached) as { data: any }).data, hit: true }
-  const client = new OuraClient(env, rec)
-  const { status, body, retryAfter } = await client.request(spec.path, params)
-  if (status === 429) throw new OuraError(429, `Oura 限流，请 ${retryAfter || 60}s 后重试`, retryAfter ?? undefined)
-  if (status !== 200) throw new OuraError(502, `Oura ${spec.path} 返回 ${status}: ${body?.detail ?? ''}`)
-  await env.OURA_KV.put(key, JSON.stringify({ saved: Date.now(), data: body }), { expirationTtl: spec.ttl })
-  return { data: body, hit: false }
 }
 
 function errorResponse(c: any, e: unknown) {
@@ -98,6 +74,10 @@ app.get('/', async (c) => {
 })
 
 app.get('/healthz', (c) => c.json({ ok: true, ts: Date.now() }))
+
+// ---------------- MCP（Model Context Protocol） ----------------
+
+registerMcpRoutes(app)
 
 // ---------------- 多用户 OAuth ----------------
 
@@ -153,18 +133,15 @@ app.use('/api/*', async (c, next) => {
 })
 
 app.get('/api/users', async (c) => {
-  const users: { id: string; email?: string; connectedAt: number; lastSyncAt?: number }[] = []
-  let cursor: string | undefined
-  for (;;) {
-    const list = await c.env.OURA_KV.list({ prefix: 'user:', cursor })
-    for (const k of list.keys) {
-      const rec = await getUser(c.env, k.name.slice('user:'.length))
-      if (rec) users.push({ id: rec.id, email: rec.email, connectedAt: rec.connectedAt, lastSyncAt: rec.lastSyncAt })
-    }
-    if (list.list_complete) break
-    cursor = list.cursor
-  }
-  return c.json({ users })
+  const users = await listUsers(c.env)
+  return c.json({
+    users: users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      connectedAt: u.connectedAt,
+      lastSyncAt: u.lastSyncAt,
+    })),
+  })
 })
 
 app.post('/api/connections/:id/disconnect', async (c) => {
@@ -187,31 +164,10 @@ app.get('/api/data/:userId/summary', async (c) => {
   const rec = await getUser(c.env, c.req.param('userId'))
   if (!rec) return c.json({ error: 'user_not_found' }, 404)
   const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '30', 10) || 30, 1), 365)
-  const range = { start_date: isoDay(-(days - 1)), end_date: isoDay(0) }
+  const range = { start: isoDay(-(days - 1)), end: isoDay(0) }
   try {
-    // 先串行确保 token 新鲜，避免并发刷新导致 refresh_token 轮换竞态
-    await ensureFreshToken(c.env, rec)
-    const results = await Promise.all(SUMMARY_ENDPOINTS.map((e) => fetchCached(c.env, rec, e, range)))
-    const byDay = new Map<string, any>()
-    const put = (name: string, payload: any) => {
-      for (const item of payload?.data ?? []) {
-        if (!item?.day) continue
-        const row = byDay.get(item.day) ?? { date: item.day }
-        if (name === 'readiness') {
-          row.readiness = item.score ?? null
-          row.rhr = item.contributors?.resting_heart_rate ?? null
-          row.hrv = item.contributors?.hrv_balance ?? null
-        } else {
-          row[name] = item.score ?? null
-        }
-        byDay.set(item.day, row)
-      }
-    }
-    put('sleep', results[0].data)
-    put('readiness', results[1].data)
-    put('activity', results[2].data)
-    const rows = [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
-    return c.json({ start: range.start_date, end: range.end_date, days: rows })
+    const rows = await getSummaryRows(c.env, rec, range)
+    return c.json({ start: range.start, end: range.end, days: rows })
   } catch (e) {
     return errorResponse(c, e)
   }
@@ -311,32 +267,24 @@ app.post('/webhook/oura', async (c) => {
 async function cronSync(env: Env): Promise<void> {
   if (!env.OURA_CLIENT_ID || !env.OURA_CLIENT_SECRET) return
   const prefetch = env.CRON_PREFETCH !== '0'
-  let cursor: string | undefined
-  for (;;) {
-    const list = await env.OURA_KV.list({ prefix: 'user:', cursor })
-    for (const k of list.keys) {
-      const rec = await getUser(env, k.name.slice('user:'.length))
-      if (!rec) continue
-      try {
-        await ensureFreshToken(env, rec)
-        if (prefetch) {
-          const range = { start_date: isoDay(-1), end_date: isoDay(0) }
-          for (const e of SUMMARY_ENDPOINTS) {
-            try {
-              await fetchCached(env, rec, e, range)
-            } catch {
-              // 单个用户/端点失败不影响其他用户
-            }
+  for (const rec of await listUsers(env)) {
+    try {
+      await ensureFreshToken(env, rec)
+      if (prefetch) {
+        const range = { start_date: isoDay(-1), end_date: isoDay(0) }
+        for (const e of SUMMARY_ENDPOINTS) {
+          try {
+            await fetchCached(env, rec, e, range)
+          } catch {
+            // 单个用户/端点失败不影响其他用户
           }
         }
-        rec.lastSyncAt = Math.floor(Date.now() / 1000)
-        await saveUser(env, rec)
-      } catch (e) {
-        console.log(`cron sync failed for ${rec.id}:`, e instanceof Error ? e.message : e)
       }
+      rec.lastSyncAt = Math.floor(Date.now() / 1000)
+      await saveUser(env, rec)
+    } catch (e) {
+      console.log(`cron sync failed for ${rec.id}:`, e instanceof Error ? e.message : e)
     }
-    if (list.list_complete) break
-    cursor = list.cursor
   }
 }
 
