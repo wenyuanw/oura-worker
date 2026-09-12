@@ -492,7 +492,7 @@ function renderStats(rows) {
     }
     var spark = sparkSVG(rows.slice(-7).map(function (r) { return r[m.key] }), m.color)
     html += '<div class="stat card" style="--i:' + idx + '"><div class="label"><span class="dot" style="background:' + m.color + '"></span>' + m.name + '</div>' +
-      '<div class="stat-body"><div class="stat-main"><div class="value">' + (last ? last[m.key] : '—') + '</div><div class="sub">' + (last ? last.date : '暂无数据') + '</div>' + delta + '</div>' +
+      '<div class="stat-body"><div class="stat-main"><div class="value">' + (last ? last[m.key] : '—') + '</div><div class="sub">' + (last ? last.date.slice(5) : '暂无数据') + '</div>' + delta + '</div>' +
       (spark ? '<div class="spark">' + spark + '</div>' : '') +
       '</div></div>'
   })
