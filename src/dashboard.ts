@@ -657,6 +657,22 @@ function sparkSVG(vals, color) {
   return '<svg width="90" height="36" viewBox="0 0 90 36"><polyline points="' + pl + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3" fill="' + color + '"/></svg>'
 }
 
+function makeUserLabel(u) {
+  var wrap = document.createElement('div')
+  wrap.style.cssText = 'flex:0 0 170px;min-width:0'
+  var email = document.createElement('div')
+  email.style.cssText = 'font-size:12px;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+  email.textContent = u.email || u.id.slice(0, 8)
+  wrap.appendChild(email)
+  if (u.alias) {
+    var al = document.createElement('div')
+    al.style.cssText = 'font-size:12px;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+    al.textContent = '备注: ' + u.alias
+    wrap.appendChild(al)
+  }
+  return wrap
+}
+
 function toggleCard(card, forceOpen) {
   var open = forceOpen === true ? true : !card.classList.contains('open')
   Array.prototype.forEach.call(document.querySelectorAll('.mcard'), function (c) { c.classList.remove('open') })
@@ -761,14 +777,7 @@ function init() {
         var row = document.createElement('div')
         row.className = 'row'
         row.style.marginBottom = '8px'
-        var label = document.createElement('span')
-        label.className = 'subtle'
-        label.style.fontSize = '12px'
-        label.style.flex = '0 0 160px'
-        label.style.overflow = 'hidden'
-        label.style.textOverflow = 'ellipsis'
-        label.style.whiteSpace = 'nowrap'
-        label.textContent = u.alias || u.email || u.id.slice(0, 8)
+        var label = makeUserLabel(u)
         var input = document.createElement('input')
         input.className = 'invite-input'
         input.readOnly = true
@@ -819,14 +828,7 @@ function init() {
         var row = document.createElement('div')
         row.className = 'row'
         row.style.marginBottom = '8px'
-        var label = document.createElement('span')
-        label.className = 'subtle'
-        label.style.fontSize = '12px'
-        label.style.flex = '0 0 160px'
-        label.style.overflow = 'hidden'
-        label.style.textOverflow = 'ellipsis'
-        label.style.whiteSpace = 'nowrap'
-        label.textContent = u.alias || u.email || u.id.slice(0, 8)
+        var label = makeUserLabel(u)
         var input = document.createElement('input')
         input.className = 'invite-input'
         input.placeholder = '备注名，如：我 / 老婆'
