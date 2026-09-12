@@ -4,7 +4,7 @@
 
 **Oura Ring 多用户数据服务 —— Cloudflare Workers + 数据看板 + MCP 服务器**
 
-把你和家人的 Oura 手环数据接入自己的服务：多用户授权、数据 API、可视化看板，
+把你和家人的 Oura Ring 指环数据接入自己的服务：多用户授权、数据 API、可视化看板，
 还能作为 [MCP 服务器](https://modelcontextprotocol.io) 接入 Claude 等 AI Agent，直接用自然语言查询健康数据。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -95,7 +95,7 @@ npx wrangler secret put ADMIN_KEY           # 自己生成一个管理密钥，�
 
 > 📖 参考：[Oura API v2 官方文档](https://cloud.ouraring.com/v2/docs) · [认证章节](https://cloud.ouraring.com/v2/docs#section/Authentication)
 
-### 7. 连接你的手环
+### 7. 连接你的指环
 
 浏览器打开：
 
@@ -189,7 +189,7 @@ src/
 | Oura 授权页报 `400 invalid_request` | Redirect URI 与实际回调地址不一致，去 Oura 开发者后台核对 |
 | 看板提示「personal_info 未返回用户 id」 | 升级到最新代码（旧版本解析 bug），或确认授权未撤销 |
 | `401 unauthorized` | ADMIN_KEY 不对，或 Header 不是「Bearer 密钥」格式 |
-| 数据一直为空 | 先完成 `/auth/oura` 授权；Oura 数据需手环同步后才有 |
+| 数据一直为空 | 先完成 `/auth/oura` 授权；Oura 数据需指环同步后才有 |
 | 国内访问 workers.dev 受阻 | 给 Worker 绑定自定义域名，并把 Oura 后台回调地址同步更新 |
 
 ## 🔗 相关链接
