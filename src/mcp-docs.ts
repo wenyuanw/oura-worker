@@ -8,24 +8,38 @@ export function mcpDocsPage(origin: string): string {
     null,
     2,
   )
-  const agentPrompt = `你已连接名为「oura」的 MCP 服务器（我们全家的 Oura Ring 健康数据服务，支持多人）。
+  const agentPrompt = `请把我的 Oura Ring 戒指健康数据服务接入你的能力范围，然后查询数据。
 
-端点与鉴权（供参考）：
-- 传输：MCP Streamable HTTP（无状态）
-- URL：${endpoint}
-- 鉴权：HTTP Header「Authorization: Bearer <ADMIN_KEY>」；若客户端无法设置 Header，改用 URL：${endpoint}?key=<ADMIN_KEY>
+## 服务信息
+- 协议：MCP（Model Context Protocol），Streamable HTTP 传输，无状态
+- 端点：${endpoint}
+- 鉴权：每个请求带 Header「Authorization: Bearer <ADMIN_KEY>」
 
-可用工具：
-1. list_users() —— 列出已接入的用户（id、邮箱、备注名、最近同步时间）
-2. get_daily_summary({ userId?/email?/alias?, days?, startDate?, endDate? }) —— 每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡
-3. get_oura_data({ endpoint, userId?/email?/alias?, startDate?, endDate?, nextToken? }) —— 查询任意 Oura v2 端点原始数据；endpoint 可选 daily_sleep / daily_readiness / daily_activity / daily_stress / sleep / heartrate / workout / session / tag 等；heartrate 必须提供 startDate 和 endDate；返回含 next_token 时把它传入 nextToken 继续翻页
+## 接入方式（按你的能力选择其一）
 
-使用约定：
-- 多人数据：每个用户可用 email（部分匹配，忽略大小写）或 alias（备注名）定位；备注名如「我」「老婆」，不确定时先调用 list_users 查看
-- 只有一个人接入时，定位参数可全部省略
-- 「最近 N 天」类问题用 get_daily_summary；需要明细数据（心率曲线、睡眠分期、锻炼记录等）用 get_oura_data
+A. 你的运行环境原生支持 MCP：注册一个名为 oura 的 Streamable HTTP 服务器，URL 与鉴权头如上。例如 Claude Code 可执行：
+   claude mcp add --transport http oura ${endpoint} --header "Authorization: Bearer <ADMIN_KEY>"
 
-现在请执行：调用 list_users，然后用 get_daily_summary 查询每个用户最近 7 天数据，分人用表格总结睡眠与恢复趋势。`
+B. 你可以执行 shell 命令：用 curl 以 POST + JSON-RPC 2.0 直接调用（Header 需含 content-type: application/json 与上述 Authorization）：
+   1) 握手：curl -s -X POST ${endpoint} -H "authorization: Bearer <ADMIN_KEY>" -H "content-type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"agent","version":"1"}}}'
+   2) 列出工具：同上，body 为 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
+   3) 调用工具：同上，body 为 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_daily_summary","arguments":{"alias":"我","days":7}}}
+
+C. 你只能发起简单 HTTP GET：直接用 REST 接口（无需 MCP）：
+   用户列表：curl -s -H "authorization: Bearer <ADMIN_KEY>" "${origin}/api/users"
+   每日概览：curl -s -H "authorization: Bearer <ADMIN_KEY>" "${origin}/api/data/<userId>/summary?days=7"
+
+## 可用工具（MCP）
+1. list_users() —— 列出用户（id、邮箱、备注名：「我」「老婆」）
+2. get_daily_summary({ userId?/email?/alias?, days?, startDate?, endDate? }) —— 每日睡眠/恢复度/活动评分、静息心率、HRV 平衡
+3. get_oura_data({ endpoint, userId?/email?/alias?, startDate?, endDate?, nextToken? }) —— 任意 Oura 端点原始数据；heartrate 必须带 startDate/endDate；翻页时把返回的 next_token 传入 nextToken
+
+## 约定
+- 多人数据：用 alias（「我」「老婆」）或 email 部分匹配定位；不确定先 list_users
+- get_daily_summary 返回体含 user 字段，回答时请注明数据归属
+
+## 现在执行
+完成接入后：调用 list_users，然后查询每个用户最近 7 天的 get_daily_summary，分人用表格总结睡眠/恢复度趋势，并各指出最异常的一天。`
 
   return shell(
     'Oura MCP 接入文档',
