@@ -176,11 +176,11 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 }
 `
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!)
 }
 
-function shell(title: string, body: string): string {
+export function shell(title: string, body: string): string {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -328,6 +328,9 @@ export function dashboardPage(): string {
       <input class="invite-input" id="inviteInput" readonly>
       <button id="copyInvite">复制</button>
     </div>
+    <div class="section-label" style="margin-top:18px">MCP 接入</div>
+    <p class="modal-desc">把本服务作为 MCP 工具接入 Claude 等 AI Agent，让 Agent 直接查询你的 Oura 数据。</p>
+    <div class="row"><a class="btn" href="/mcp-docs">查看 MCP 文档 →</a></div>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>

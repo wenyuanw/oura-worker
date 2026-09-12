@@ -1,0 +1,119 @@
+import { esc, shell } from './dashboard'
+
+export function mcpDocsPage(origin: string): string {
+  const endpoint = `${origin}/mcp`
+  const cliCmd = `claude mcp add --transport http oura ${endpoint} \\\n  --header "Authorization: Bearer <ADMIN_KEY>"`
+  const desktopJson = JSON.stringify(
+    { mcpServers: { oura: { type: 'http', url: endpoint, headers: { Authorization: 'Bearer <ADMIN_KEY>' } } } },
+    null,
+    2,
+  )
+  const agentPrompt = `你已连接名为「oura」的 MCP 服务器（我的 Oura Ring 健康数据服务）。
+
+端点与鉴权（供参考）：
+- 传输：MCP Streamable HTTP（无状态）
+- URL：${endpoint}
+- 鉴权：HTTP Header「Authorization: Bearer <ADMIN_KEY>」；若客户端无法设置 Header，改用 URL：${endpoint}?key=<ADMIN_KEY>
+
+可用工具：
+1. list_users() —— 列出已接入的用户（id、邮箱、最近同步时间）
+2. get_daily_summary({ userId?, days?, startDate?, endDate? }) —— 每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡
+3. get_oura_data({ endpoint, userId?, startDate?, endDate?, nextToken? }) —— 查询任意 Oura v2 端点原始数据；endpoint 可选 daily_sleep / daily_readiness / daily_activity / daily_stress / sleep / heartrate / workout / session / tag 等；heartrate 必须提供 startDate 和 endDate；返回含 next_token 时把它传入 nextToken 继续翻页
+
+使用约定：
+- 先调用 list_users 确定用户 id；只有一个用户时其余工具可省略 userId
+- 「最近 N 天」类问题用 get_daily_summary
+- 需要明细数据（心率曲线、睡眠分期、锻炼记录等）用 get_oura_data
+
+现在请执行：调用 list_users，然后用 get_daily_summary 查询最近 7 天数据，用表格总结我的睡眠与恢复趋势，并指出最异常的一天。`
+
+  return shell(
+    'Oura MCP 接入文档',
+    `<div class="wrap">
+  <div class="row" style="margin-bottom:24px">
+    <div class="brand" style="margin-right:auto"><span class="mark"></span>Oura MCP 接入文档</div>
+    <a class="btn" href="/">← 返回看板</a>
+  </div>
+
+  <div class="panel">
+    <h2>端点</h2>
+    <p class="desc">MCP Streamable HTTP（无状态），兼容协议版本 2024-11-05 / 2025-03-26 / 2025-06-18</p>
+    <div class="row">
+      <span class="chip" id="epUrl">${esc(endpoint)}</span>
+      <button class="copy-btn" data-copy="#epUrl">复制</button>
+    </div>
+    <p class="desc" style="margin:14px 0 0">鉴权二选一：请求头 <code>Authorization: Bearer &lt;ADMIN_KEY&gt;</code>；客户端不支持自定义 Header 时，改用 <code>${esc(endpoint)}?key=&lt;ADMIN_KEY&gt;</code>。ADMIN_KEY 即看板登录密钥。</p>
+  </div>
+
+  <div class="panel">
+    <h2>可用工具</h2>
+    <p class="desc">所有工具共享看板的 KV 缓存与 token 自动刷新，Oura 限流时返回错误提示稍后重试即可</p>
+    <div style="overflow:auto">
+    <table>
+      <tr><th>工具</th><th>说明</th><th>参数</th></tr>
+      <tr><td class="mono">list_users</td><td>列出已接入用户（id、邮箱、最近同步时间）</td><td class="mono">—</td></tr>
+      <tr><td class="mono">get_daily_summary</td><td>每日概览：睡眠 / 恢复度 / 活动评分、静息心率、HRV 平衡</td><td class="mono">userId? · days? · startDate? · endDate?</td></tr>
+      <tr><td class="mono">get_oura_data</td><td>查询任意 Oura v2 端点原始数据</td><td class="mono">endpoint（必填）· userId? · startDate? · endDate? · nextToken?</td></tr>
+    </table>
+    </div>
+    <p class="desc" style="margin:12px 0 0">端点可选值与看板探索器一致：daily_sleep / daily_readiness / daily_activity / daily_stress / daily_resilience / daily_spo2 / daily_cardiovascular_age / vo2_max / sleep / sleep_time / heartrate / session / workout / tag / enhanced_tag / rest_mode_period / ring_configuration / personal_info</p>
+  </div>
+
+  <div class="panel">
+    <h2>Claude Code / CLI 接入</h2>
+    <p class="desc">在终端执行（把 &lt;ADMIN_KEY&gt; 换成你的密钥）</p>
+    <pre id="cliCmd">${esc(cliCmd)}</pre>
+    <div class="row" style="margin-top:10px"><button class="copy-btn" data-copy="#cliCmd">复制命令</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>Claude Desktop / 通用客户端配置</h2>
+    <p class="desc">编辑 claude_desktop_config.json，或填写到客户端的「自定义连接器 / MCP 服务器」表单</p>
+    <pre id="deskJson">${esc(desktopJson)}</pre>
+    <div class="row" style="margin-top:10px"><button class="copy-btn" data-copy="#deskJson">复制 JSON</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>给 Agent 的 Prompt（一键复制）</h2>
+    <p class="desc">整段复制、粘贴给任何已接入本 MCP 的 AI Agent；Agent 没有 MCP 能力时，也可以让它按这段说明直接通过 HTTP 调用</p>
+    <pre id="agentPrompt">${esc(agentPrompt)}</pre>
+    <div class="row" style="margin-top:10px"><button class="copy-btn primary" data-copy="#agentPrompt">复制完整 Prompt</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>常见问题</h2>
+    <div style="overflow:auto">
+    <table>
+      <tr><th>现象</th><th>原因与处理</th></tr>
+      <tr><td class="mono">401 unauthorized</td><td>ADMIN_KEY 不对，或 Header 格式不是「Bearer 密钥」</td></tr>
+      <tr><td class="mono">还没有用户连接</td><td>先在浏览器完成 <a href="/auth/oura">/auth/oura</a> 的 Oura 授权</td></tr>
+      <tr><td class="mono">429 / Oura 限流</td><td>触达 Oura 限流（每 5 分钟 5000 次），稍后重试；服务端有缓存，通常不会触发</td></tr>
+      <tr><td class="mono">连不上 workers.dev</td><td>部分地区网络访问 workers.dev 受阻，可给 Worker 绑定自定义域名后把端点换成自定义域名</td></tr>
+    </table>
+    </div>
+  </div>
+</div>
+<script>
+Array.prototype.forEach.call(document.querySelectorAll('.copy-btn'), function (b) {
+  b.onclick = function () {
+    var el = document.querySelector(b.getAttribute('data-copy'))
+    if (!el) return
+    var text = el.tagName === 'INPUT' ? el.value : el.textContent
+    var old = b.textContent
+    function done() { b.textContent = '已复制 ✓'; setTimeout(function () { b.textContent = old }, 1500) }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done)
+    } else {
+      var ta = document.createElement('textarea')
+      ta.value = text
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      done()
+    }
+  }
+})
+</script>`,
+  )
+}

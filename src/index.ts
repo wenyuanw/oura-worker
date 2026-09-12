@@ -14,6 +14,7 @@ import {
   saveUser,
 } from './oura'
 import { registerMcpRoutes } from './mcp'
+import { mcpDocsPage } from './mcp-docs'
 import type { Env, UserRecord } from './types'
 import { hmacHex, isoDay } from './util'
 
@@ -74,6 +75,8 @@ app.get('/', async (c) => {
 })
 
 app.get('/healthz', (c) => c.json({ ok: true, ts: Date.now() }))
+
+app.get('/mcp-docs', (c) => c.html(mcpDocsPage(new URL(c.req.url).origin)))
 
 // ---------------- MCP（Model Context Protocol） ----------------
 
