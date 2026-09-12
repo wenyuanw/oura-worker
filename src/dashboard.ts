@@ -98,9 +98,13 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 
 /* ---- 移动端 ---- */
 @media (max-width: 720px) {
+  .topbar { position: static; backdrop-filter: none; background: var(--bg) }
   .topbar-inner { height:auto; padding:10px 12px; row-gap:10px }
   .brand { flex-basis:100%; margin-right:0 }
-  .topbar-inner select { flex:1 1 auto; min-width:0 }
+  .topbar-inner select { flex:1 1 100%; min-width:0 }
+  .topbar-inner > button { flex:1 }
+  .topbar-inner > form { flex:1; display:inline }
+  .topbar-inner > form button { width:100% }
   .topbar-inner button { padding:0 10px }
   .wrap { padding:16px 12px 64px }
   .panel { padding:14px }
