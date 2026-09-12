@@ -151,8 +151,8 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .tabbar { display:none; position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:60;
   background:var(--surface-2); border:1px solid var(--border-strong); border-radius:999px; padding:6px; gap:4px;
   box-shadow:var(--shadow-menu) }
-.tabbar button { border:none; background:transparent; border-radius:999px; padding:8px 18px; font-size:13px;
-  color:var(--fg-muted) }
+.tabbar button { border:none; background:transparent; border-radius:999px; padding:8px 16px; font-size:13px;
+  color:var(--fg-muted); white-space:nowrap; flex:1 }
 .tabbar button.active { background:var(--border-strong); color:var(--fg) }
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
@@ -201,6 +201,7 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 @media (max-width: 720px) {
   .wrap { padding:16px 12px 110px }
   .grid { display:none }
+  #mobHome { display:block }
   .tabbar { display:flex }
   .panel { padding:14px }
   .toolbar { justify-content:stretch }
