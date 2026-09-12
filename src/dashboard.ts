@@ -78,6 +78,18 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .menu-item.danger { color:var(--red) }
 .menu-item.danger:hover { background:rgba(238,0,0,.08) }
 .menu-divider { height:1px; background:var(--border); margin:6px 4px }
+.toolbar { display:flex; justify-content:flex-end; margin-bottom:16px }
+.modal-overlay { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.65); display:none;
+  align-items:flex-start; justify-content:center; padding:12vh 16px 16px }
+.modal-overlay.open { display:flex }
+.modal { width:100%; max-width:520px; background:var(--surface); border:1px solid var(--border-strong);
+  border-radius:12px; padding:20px; box-shadow:0 24px 64px rgba(0,0,0,.6) }
+.modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
+.modal-head h3 { font-size:15px; margin:0 }
+.section-label { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--fg-subtle); margin:10px 0 6px }
+.modal-desc { font-size:13px; color:var(--fg-muted); margin:0 0 12px }
+.invite-input { flex:1; min-width:0; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
+  color:var(--fg-muted) }
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
 .subtle { color:var(--fg-subtle) }
@@ -125,11 +137,10 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 @media (max-width: 720px) {
   .wrap { padding:16px 12px 64px }
   .panel { padding:14px }
-  .panel.row { gap:8px }
-  .panel.row > .subtle { flex-basis:100% }
-  .chip { flex:1 1 auto }
-  .seg { flex:1 1 100% }
+  .toolbar { justify-content:stretch }
+  .toolbar .seg { flex:1 }
   .seg button { flex:1 }
+  .chip { flex:1 1 auto }
   .grid { grid-template-columns:repeat(2,1fr); gap:10px }
   .grid .stat:last-child { grid-column:1 / -1 }
   .stat .value { font-size:24px }
@@ -223,6 +234,7 @@ export function dashboardPage(): string {
       <div id="menuUsers"></div>
       <div class="menu-divider"></div>
       <button class="menu-item" id="miSync">同步数据</button>
+      <button class="menu-item" id="miSettings">设置</button>
       <button class="menu-item danger" id="miDisconnect">断开此用户</button>
       <div class="menu-divider"></div>
       <button class="menu-item" id="miLogout">登出</button>
@@ -239,11 +251,7 @@ export function dashboardPage(): string {
   </div>
 
   <div id="app">
-    <div class="panel row" style="padding:14px 20px">
-      <span class="subtle" style="font-size:12px">邀请用户授权</span>
-      <span class="chip" id="invite2"></span>
-      <button id="copy2">复制</button>
-      <span class="spacer"></span>
+    <div class="toolbar">
       <div class="seg" id="rangeSeg">
         <button class="range" data-days="7">7 天</button>
         <button class="range" data-days="30">30 天</button>
@@ -283,6 +291,21 @@ export function dashboardPage(): string {
         <button id="explore" class="primary">查询</button>
       </div>
       <pre id="out">选择端点后点击查询</pre>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>设置</h3>
+      <button id="settingsClose">✕</button>
+    </div>
+    <div class="section-label">邀请用户授权</div>
+    <p class="modal-desc">把下面的授权链接发给其他 Oura 用户，对方登录并同意授权后即接入本服务（未获 Oura 正式批准的应用最多 10 人）。</p>
+    <div class="row">
+      <input class="invite-input" id="inviteInput" readonly>
+      <button id="copyInvite">复制</button>
     </div>
   </div>
 </div>
@@ -382,7 +405,13 @@ function init() {
   function closeMenu() { menu.classList.remove('open') }
   $('#userMenuBtn').onclick = function (e) { e.stopPropagation(); menu.classList.toggle('open') }
   document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu() })
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu() })
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenu(); closeSettings() } })
+
+  var settingsModal = $('#settingsModal')
+  function closeSettings() { settingsModal.classList.remove('open') }
+  $('#miSettings').onclick = function () { closeMenu(); settingsModal.classList.add('open') }
+  $('#settingsClose').onclick = closeSettings
+  settingsModal.addEventListener('click', function (e) { if (e.target === settingsModal) closeSettings() })
 
   function setCurrent(uid) {
     UID = uid
@@ -427,8 +456,8 @@ function init() {
 
   var inv = location.origin + '/auth/oura'
   $('#invite').textContent = inv
-  $('#invite2').textContent = inv
-  $('#copy').onclick = $('#copy2').onclick = function () {
+  $('#inviteInput').value = inv
+  $('#copy').onclick = $('#copyInvite').onclick = function () {
     var t = this
     navigator.clipboard.writeText(inv).then(function () {
       var old = t.textContent
