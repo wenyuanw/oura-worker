@@ -51,7 +51,7 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .topbar-inner { max-width:1120px; margin:0 auto; padding:0 24px; height:56px;
   display:flex; flex-wrap:wrap; gap:10px; align-items:center }
 .brand { display:flex; align-items:center; gap:10px; margin-right:auto; font-weight:600; font-size:15px }
-.brand .mark { color:var(--fg); font-size:16px }
+.brand .mark { width:14px; height:14px; border:2.5px solid var(--fg); border-radius:50% }
 .brand .env { font-size:11px; color:var(--fg-subtle); border:1px solid var(--border); border-radius:999px; padding:1px 8px; font-weight:400 }
 .wrap { max-width:1120px; margin:0 auto; padding:28px 24px 80px }
 .muted { color:var(--fg-muted) }
@@ -89,7 +89,8 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 .login .brand { justify-content:center; margin:0 0 4px; font-size:16px }
 .login p { margin:0 0 8px }
 .notice { border:1px dashed var(--border-strong); border-radius:10px; padding:36px 28px; text-align:center; margin-bottom:16px }
-.notice h2 { font-size:15px; margin:12px 0 6px }
+.notice .glyph { width:30px; height:30px; margin:0 auto; border:3px solid var(--border-strong); border-radius:50% }
+.notice h2 { font-size:15px; margin:14px 0 6px }
 .notice p { color:var(--fg-muted); font-size:13px; margin:0 0 16px }
 `
 
@@ -111,7 +112,7 @@ function shell(title: string, body: string): string {
 </html>`
 }
 
-const BRAND = `<span class="mark">▲</span> Oura Dashboard`
+const BRAND = `<span class="mark"></span>Oura Dashboard`
 
 export function loginPage(error?: string): string {
   return shell(
@@ -167,7 +168,7 @@ export function dashboardPage(): string {
 
 <div class="wrap">
   <div id="empty" style="display:none" class="notice">
-    <div style="font-size:22px">▲</div>
+    <div class="glyph"></div>
     <h2>还没有用户连接</h2>
     <p>把下面的授权链接发给自己或他人，在 Oura 登录并同意授权后，账号即接入本服务。</p>
     <div class="row" style="justify-content:center"><span class="chip" id="invite"></span><button id="copy">复制</button></div>
