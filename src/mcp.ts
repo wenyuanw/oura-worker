@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono'
 import { ENDPOINTS } from './oura'
-import { fetchCached, getSummaryRows, listUsers } from './data'
-import type { Env, UserRecord } from './types'
+import { fetchCached, getSummaryRows, listUsers, resolveAccess } from './data'
+import type { Access, Env, UserRecord } from './types'
 import { isoDay } from './util'
 
 /**
@@ -97,8 +97,9 @@ function describeUsers(users: UserRecord[]): string {
     .join('、')
 }
 
-/** 解析目标用户：支持 userId / email（部分匹配）/ alias（备注名）；省略时单用户自动选定 */
-async function resolveUser(env: Env, args: any): Promise<{ rec: UserRecord } | { errorText: string }> {
+/** 解析目标用户：用户 Key 访问时强制限定本人；管理员支持 userId / email / alias 定位 */
+async function resolveUser(env: Env, args: any, access: Access): Promise<{ rec: UserRecord } | { errorText: string }> {
+  if (!access.admin) return { rec: access.rec }
   const users = await listUsers(env)
   if (!users.length) {
     return { errorText: '还没有用户连接。先访问 /auth/oura 完成 Oura 授权后再试' }
@@ -127,11 +128,11 @@ async function resolveUser(env: Env, args: any): Promise<{ rec: UserRecord } | {
   return { errorText: `服务中有 ${users.length} 个用户：${describeUsers(users)}。请用 userId、email 或 alias 参数指定` }
 }
 
-async function callTool(env: Env, name: string, args: any): Promise<{ content: any[]; isError?: boolean }> {
+async function callTool(env: Env, name: string, args: any, access: Access): Promise<{ content: any[]; isError?: boolean }> {
   const text = (t: string) => ({ type: 'text', text: t })
   try {
     if (name === 'list_users') {
-      const users = await listUsers(env)
+      const users = access.admin ? await listUsers(env) : [access.rec]
       return {
         content: [
           text(
@@ -154,7 +155,7 @@ async function callTool(env: Env, name: string, args: any): Promise<{ content: a
     }
 
     if (name === 'get_daily_summary') {
-      const u = await resolveUser(env, args)
+      const u = await resolveUser(env, args, access)
       if ('errorText' in u) return { content: [text(u.errorText)], isError: true }
       const daysRaw = Number.parseInt(String(args?.days ?? '30'), 10)
       const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30
@@ -184,7 +185,7 @@ async function callTool(env: Env, name: string, args: any): Promise<{ content: a
       if (!ENDPOINTS[endpoint]) {
         return { content: [text(`未知端点 ${endpoint}，可用：${Object.keys(ENDPOINTS).join(', ')}`)], isError: true }
       }
-      const u = await resolveUser(env, args)
+      const u = await resolveUser(env, args, access)
       if ('errorText' in u) return { content: [text(u.errorText)], isError: true }
       const params: Record<string, string> = {}
       for (const [k, key] of [
@@ -204,7 +205,7 @@ async function callTool(env: Env, name: string, args: any): Promise<{ content: a
   }
 }
 
-function respond(c: Context<{ Bindings: Env }>, wantsSSE: boolean, payload: any): Response {
+function respond(c: Context<{ Bindings: Env; Variables: { access: Access } }>, wantsSSE: boolean, payload: any): Response {
   const body = JSON.stringify(payload)
   if (wantsSSE) {
     return new Response(`event: message\ndata: ${body}\n\n`, {
@@ -218,18 +219,9 @@ function respond(c: Context<{ Bindings: Env }>, wantsSSE: boolean, payload: any)
   })
 }
 
-async function handleMcpPost(c: Context<{ Bindings: Env }>): Promise<Response> {
-  const adminKey = c.env.ADMIN_KEY
-  if (!adminKey) {
-    return new Response(JSON.stringify({ error: 'ADMIN_KEY 未配置' }), {
-      status: 500,
-      headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-    })
-  }
-  const auth = c.req.header('authorization')
-  const bearer = auth?.startsWith('Bearer ') ? auth.slice(7) : undefined
-  const queryKey = c.req.query('key')
-  if (bearer !== adminKey && queryKey !== adminKey) {
+async function handleMcpPost(c: Context<{ Bindings: Env; Variables: { access: Access } }>): Promise<Response> {
+  const access = await resolveAccess(c)
+  if (!access) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
       headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
@@ -275,7 +267,7 @@ async function handleMcpPost(c: Context<{ Bindings: Env }>): Promise<Response> {
         responses.push(ok(msg.id, { tools: toolDefinitions() }))
         break
       case 'tools/call': {
-        const result = await callTool(c.env, msg.params?.name, msg.params?.arguments ?? {})
+        const result = await callTool(c.env, msg.params?.name, msg.params?.arguments ?? {}, access)
         responses.push(ok(msg.id, result))
         break
       }
@@ -289,7 +281,7 @@ async function handleMcpPost(c: Context<{ Bindings: Env }>): Promise<Response> {
   return respond(c, wantsSSE, responses)
 }
 
-export function registerMcpRoutes(app: Hono<{ Bindings: Env }>): void {
+export function registerMcpRoutes(app: Hono<{ Bindings: Env; Variables: { access: Access } }>): void {
   app.options('/mcp', (c) => new Response(null, { status: 204, headers: CORS_HEADERS }))
   app.post('/mcp', (c) => handleMcpPost(c))
   app.get(

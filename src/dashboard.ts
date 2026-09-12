@@ -450,6 +450,9 @@ export function dashboardPage(): string {
     <div class="section-label" style="margin-top:18px">用户备注名</div>
     <p class="modal-desc">给每个用户起个名字（如「我」「老婆」），MCP 查询时可用 alias 参数定位到具体的人。</p>
     <div id="aliasList"></div>
+    <div class="section-label" style="margin-top:18px">个人数据 Key</div>
+    <p class="modal-desc">为用户生成独立 Key：用它（Bearer 或 ?key=）调用 API / MCP 只能查询此人的数据，无法查看其他人或修改设置。重新生成后旧 Key 立即失效。</p>
+    <div id="userKeyList"></div>
     <div class="section-label" style="margin-top:18px">MCP 接入</div>
     <p class="modal-desc">把本服务作为 MCP 工具接入 Claude 等 AI Agent，让 Agent 直接查询你的 Oura 数据。</p>
     <div class="row"><a class="btn" href="/mcp-docs">查看 MCP 文档 →</a></div>
@@ -698,9 +701,67 @@ function init() {
 
   var settingsModal = $('#settingsModal')
   function closeSettings() { settingsModal.classList.remove('open') }
-  $('#miSettings').onclick = function () { closeMenu(); settingsModal.classList.add('open'); renderAliases() }
+  $('#miSettings').onclick = function () { closeMenu(); settingsModal.classList.add('open'); renderAliases(); renderUserKeys() }
   $('#settingsClose').onclick = closeSettings
   settingsModal.addEventListener('click', function (e) { if (e.target === settingsModal) closeSettings() })
+
+  function renderUserKeys() {
+    var box = $('#userKeyList')
+    if (!box) return
+    api('/api/users').then(function (d) {
+      box.innerHTML = ''
+      var users = d.users || []
+      if (!users.length) { box.innerHTML = '<p class="subtle" style="font-size:12px;margin:0">暂无已接入用户</p>'; return }
+      users.forEach(function (u) {
+        var row = document.createElement('div')
+        row.className = 'row'
+        row.style.marginBottom = '8px'
+        var label = document.createElement('span')
+        label.className = 'subtle'
+        label.style.fontSize = '12px'
+        label.style.flex = '0 0 160px'
+        label.style.overflow = 'hidden'
+        label.style.textOverflow = 'ellipsis'
+        label.style.whiteSpace = 'nowrap'
+        label.textContent = u.alias || u.email || u.id.slice(0, 8)
+        var input = document.createElement('input')
+        input.className = 'invite-input'
+        input.readOnly = true
+        input.value = u.userKey || '未生成'
+        var copy = document.createElement('button')
+        copy.textContent = '复制'
+        copy.disabled = !u.userKey
+        copy.onclick = function () {
+          navigator.clipboard.writeText(u.userKey).then(function () {
+            var old = copy.textContent
+            copy.textContent = '已复制 ✓'
+            setTimeout(function () { copy.textContent = old }, 1200)
+          })
+        }
+        var gen = document.createElement('button')
+        gen.textContent = u.userKey ? '重新生成' : '生成'
+        gen.onclick = function () {
+          if (u.userKey && !confirm('重新生成后旧 Key 立即失效，确定？')) return
+          gen.disabled = true
+          api('/api/connections/' + u.id + '/key', { method: 'POST' }).then(function (r) {
+            u.userKey = r.userKey
+            input.value = r.userKey
+            copy.disabled = false
+            gen.textContent = '重新生成'
+            gen.disabled = false
+          }).catch(function (e) {
+            gen.disabled = false
+            alert('生成失败: ' + e.message)
+          })
+        }
+        row.appendChild(label)
+        row.appendChild(input)
+        row.appendChild(copy)
+        row.appendChild(gen)
+        box.appendChild(row)
+      })
+    })
+  }
 
   function renderAliases() {
     var box = $('#aliasList')
@@ -720,7 +781,7 @@ function init() {
         label.style.overflow = 'hidden'
         label.style.textOverflow = 'ellipsis'
         label.style.whiteSpace = 'nowrap'
-        label.textContent = u.email || u.id.slice(0, 8)
+        label.textContent = u.alias || u.email || u.id.slice(0, 8)
         var input = document.createElement('input')
         input.className = 'invite-input'
         input.placeholder = '备注名，如：我 / 老婆'

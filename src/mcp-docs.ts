@@ -89,6 +89,7 @@ export function mcpDocsPage(origin: string): string {
       <tr><td class="mono">还没有用户连接</td><td>先在浏览器完成 <a href="/auth/oura">/auth/oura</a> 的 Oura 授权</td></tr>
       <tr><td class="mono">429 / Oura 限流</td><td>触达 Oura 限流（每 5 分钟 5000 次），稍后重试；服务端有缓存，通常不会触发</td></tr>
       <tr><td class="mono">连不上 workers.dev</td><td>部分地区网络访问 workers.dev 受阻，可给 Worker 绑定自定义域名后把端点换成自定义域名</td></tr>
+      <tr><td class="mono">只想暴露某个人的数据</td><td>在看板 → 设置 → 个人数据 Key 为该用户生成独立 Key，用它做 Bearer 鉴权（API 与 MCP 均生效），即只能查询此人的数据、无法查看他人</td></tr>
     </table>
     </div>
   </div>

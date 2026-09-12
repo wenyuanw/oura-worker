@@ -56,6 +56,7 @@ https://<worker域名>/auth/oura
 ## API
 
 除 `/auth/*` 与 `/webhook/oura` 外均需鉴权：管理员 cookie（看板登录）或 `Authorization: Bearer <ADMIN_KEY>`。
+此外可为每个用户生成独立的**个人数据 Key**（看板 → 设置），用该 Key 鉴权只能查询此人的数据（API 与 MCP 均生效），适合把 Key 交给对应的人自己用。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -63,7 +64,9 @@ https://<worker域名>/auth/oura
 | POST | `/api/sync/:userId?days=30` | 立即拉取近 N 天概览数据入缓存 |
 | GET | `/api/data/:userId/summary?days=30` | 聚合的每日睡眠/恢复度/活动/静息心率/HRV |
 | GET | `/api/data/:userId/:endpoint` | 代理任意 Oura 端点（见下），支持 `start_date`、`end_date`、`next_token` |
-| POST | `/api/connections/:id/disconnect` | 断开用户并清除缓存 |
+| POST | `/api/connections/:id/disconnect` | 断开用户并清除缓存（管理员） |
+| POST | `/api/connections/:id/alias` | 设置用户备注名，MCP 可用 alias 定位（管理员） |
+| POST | `/api/connections/:id/key` | 生成/重置该用户的个人数据 Key（管理员） |
 | POST | `/api/webhook/subscribe` | 注册 Oura webhook 订阅（可加 `?data_type=`） |
 | POST | `/webhook/oura` | Oura webhook 接收端（含 HMAC 签名校验） |
 

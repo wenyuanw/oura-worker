@@ -1,10 +1,33 @@
 import { ENDPOINTS, OuraClient, OuraError, ensureFreshToken, getUser } from './oura'
-import type { Env, UserRecord } from './types'
+import type { Access, Env, UserRecord } from './types'
+import { hmacHex, isoDay } from './util'
 
 export const SUMMARY_ENDPOINTS = ['daily_sleep', 'daily_readiness', 'daily_activity'] as const
 
 export function cacheKey(userId: string, endpoint: string, params: Record<string, string>): string {
   return `cache:${userId}:${endpoint}:${JSON.stringify(params)}`
+}
+
+/** 解析请求的访问级别：ADMIN_KEY（Bearer 或管理员 cookie）→ admin；用户个人 Key → 仅该用户 */
+export async function resolveAccess(c: {
+  req: { url: string; header: (n: string) => string | undefined }
+  env: Env
+}): Promise<Access | null> {
+  const env = c.env
+  if (!env.ADMIN_KEY) return null
+  const auth = c.req.header('authorization')
+  const bearer = auth?.startsWith('Bearer ') ? auth.slice(7) : undefined
+  if (bearer === env.ADMIN_KEY) return { admin: true }
+  const queryKey = new URL(c.req.url).searchParams.get('key')
+  if (queryKey === env.ADMIN_KEY) return { admin: true }
+  const cookieHeader = c.req.header('cookie') ?? ''
+  const m = cookieHeader.match(/(?:^|;\s*)oura_admin=([^;]+)/)
+  if (m && m[1] === (await hmacHex(env.ADMIN_KEY, 'admin-v1'))) return { admin: true }
+  if (bearer) {
+    const rec = (await listUsers(env)).find((u) => u.userKey === bearer)
+    if (rec) return { admin: false, rec }
+  }
+  return null
 }
 
 export async function listUsers(env: Env): Promise<UserRecord[]> {

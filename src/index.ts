@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { connectedPage, dashboardPage, errorPage, loginPage } from './dashboard'
-import { fetchCached, getSummaryRows, listUsers, SUMMARY_ENDPOINTS } from './data'
+import { fetchCached, getSummaryRows, listUsers, resolveAccess, SUMMARY_ENDPOINTS } from './data'
 import {
   DEFAULT_SCOPE,
   ENDPOINTS,
@@ -15,10 +15,10 @@ import {
 } from './oura'
 import { registerMcpRoutes } from './mcp'
 import { mcpDocsPage } from './mcp-docs'
-import type { Env, UserRecord } from './types'
+import type { Access, Env, UserRecord } from './types'
 import { hmacHex, isoDay } from './util'
 
-const app = new Hono<{ Bindings: Env }>()
+const app = new Hono<{ Bindings: Env; Variables: { access: Access } }>()
 
 const COOKIE_NAME = 'oura_admin'
 // 每个订阅占用一个 (event_type, data_type) 组合
@@ -30,11 +30,9 @@ function redirectUri(c: { req: { url: string }; env: Env }): string {
   return `${origin}/auth/callback`
 }
 
-async function isAdmin(c: Context<{ Bindings: Env }>): Promise<boolean> {
-  if (!c.env.ADMIN_KEY) return false
-  const auth = c.req.header('authorization')
-  if (auth?.startsWith('Bearer ') && auth.slice(7) === c.env.ADMIN_KEY) return true
-  return getCookie(c, COOKIE_NAME) === (await hmacHex(c.env.ADMIN_KEY, 'admin-v1'))
+async function isAdmin(c: Context<{ Bindings: Env; Variables: { access: Access } }>): Promise<boolean> {
+  const access = await resolveAccess(c)
+  return !!access && access.admin
 }
 
 function errorResponse(c: any, e: unknown) {
@@ -128,27 +126,46 @@ app.get('/auth/callback', async (c) => {
   }
 })
 
-// ---------------- 管理 API（Bearer ADMIN_KEY 或管理员 cookie） ----------------
+// ---------------- API（ADMIN_KEY/管理员 cookie 全权限；用户个人 Key 仅限本人数据） ----------------
 
 app.use('/api/*', async (c, next) => {
-  if (await isAdmin(c)) return next()
-  return c.json({ error: 'unauthorized' }, 401)
+  const access = await resolveAccess(c)
+  if (!access) return c.json({ error: 'unauthorized' }, 401)
+  c.set('access', access)
+  await next()
 })
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const adminOnly: any = async (c: any, next: any) => {
+  if (!c.get('access').admin) return c.json({ error: 'forbidden: 仅管理员可操作' }, 403)
+  await next()
+}
 
 app.get('/api/users', async (c) => {
-  const users = await listUsers(c.env)
-  return c.json({
-    users: users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      alias: u.alias,
-      connectedAt: u.connectedAt,
-      lastSyncAt: u.lastSyncAt,
-    })),
+  const access = c.get('access')
+  const toDto = (u: UserRecord) => ({
+    id: u.id,
+    email: u.email,
+    alias: u.alias,
+    userKey: u.userKey,
+    connectedAt: u.connectedAt,
+    lastSyncAt: u.lastSyncAt,
   })
+  if (!access.admin) return c.json({ users: [toDto(access.rec)] })
+  return c.json({ users: (await listUsers(c.env)).map(toDto) })
 })
 
-app.post('/api/connections/:id/alias', async (c) => {
+app.post('/api/connections/:id/key', adminOnly, async (c) => {
+  const rec = await getUser(c.env, c.req.param('id'))
+  if (!rec) return c.json({ error: 'user_not_found' }, 404)
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  rec.userKey = 'uk_' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+  await saveUser(c.env, rec)
+  return c.json({ ok: true, userKey: rec.userKey })
+})
+
+app.post('/api/connections/:id/alias', adminOnly, async (c) => {
   const rec = await getUser(c.env, c.req.param('id'))
   if (!rec) return c.json({ error: 'user_not_found' }, 404)
   const body: any = await c.req.json().catch(() => ({}))
@@ -159,7 +176,7 @@ app.post('/api/connections/:id/alias', async (c) => {
   return c.json({ ok: true, alias: rec.alias ?? null })
 })
 
-app.post('/api/connections/:id/disconnect', async (c) => {
+app.post('/api/connections/:id/disconnect', adminOnly, async (c) => {
   const id = c.req.param('id')
   if (!(await getUser(c.env, id))) return c.json({ error: 'user_not_found' }, 404)
   await c.env.OURA_KV.delete(`user:${id}`)
@@ -176,6 +193,8 @@ app.post('/api/connections/:id/disconnect', async (c) => {
 
 // 注意：summary 路由必须注册在通配 :endpoint 之前
 app.get('/api/data/:userId/summary', async (c) => {
+  const access = c.get('access')
+  if (!access.admin && access.rec.id !== c.req.param('userId')) return c.json({ error: 'forbidden: 只能查询本人数据' }, 403)
   const rec = await getUser(c.env, c.req.param('userId'))
   if (!rec) return c.json({ error: 'user_not_found' }, 404)
   const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '30', 10) || 30, 1), 365)
@@ -189,6 +208,8 @@ app.get('/api/data/:userId/summary', async (c) => {
 })
 
 app.post('/api/sync/:userId', async (c) => {
+  const access = c.get('access')
+  if (!access.admin && access.rec.id !== c.req.param('userId')) return c.json({ error: 'forbidden: 只能同步本人数据' }, 403)
   const rec = await getUser(c.env, c.req.param('userId'))
   if (!rec) return c.json({ error: 'user_not_found' }, 404)
   const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '30', 10) || 30, 1), 365)
@@ -214,6 +235,8 @@ app.post('/api/sync/:userId', async (c) => {
 })
 
 app.get('/api/data/:userId/:endpoint', async (c) => {
+  const access = c.get('access')
+  if (!access.admin && access.rec.id !== c.req.param('userId')) return c.json({ error: 'forbidden: 只能查询本人数据' }, 403)
   const endpoint = c.req.param('endpoint')
   if (!ENDPOINTS[endpoint]) return c.json({ error: 'unknown_endpoint', allowed: Object.keys(ENDPOINTS) }, 404)
   const rec = await getUser(c.env, c.req.param('userId'))
@@ -234,7 +257,7 @@ app.get('/api/data/:userId/:endpoint', async (c) => {
 
 // ---------------- Oura webhook ----------------
 
-app.post('/api/webhook/subscribe', async (c) => {
+app.post('/api/webhook/subscribe', adminOnly, async (c) => {
   const origin = redirectUri(c).replace(/\/auth\/callback$/, '')
   const single = c.req.query('data_type')
   const targets = single ? [single] : WEBHOOK_DATA_TYPES
