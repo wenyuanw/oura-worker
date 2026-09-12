@@ -10,7 +10,7 @@ const BASE_CSS = `
   --shadow-menu: 0 12px 32px rgba(0,0,0,.55); --shadow-modal: 0 24px 64px rgba(0,0,0,.6);
   --tip-bg: rgba(17,17,17,.96); --tip-border: #333;
   --scroll-thumb: #333;
-  --accent: #0070f3; --red: #ee0000; --green: #50e3c2; --amber: #f5a623; --purple: #7928ca;
+  --accent: #0070f3; --red: #ee0000; --green: #3fb950; --amber: #f5a623; --purple: #7928ca;
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -23,6 +23,7 @@ const BASE_CSS = `
   --chart-grid: #eaeaea; --chart-tick: #999; --legend-text: #666;
   --shadow-menu: 0 12px 32px rgba(0,0,0,.12); --shadow-modal: 0 24px 64px rgba(0,0,0,.18);
   --tip-bg: rgba(255,255,255,.98); --tip-border: #d4d4d4;
+  --green: #1a7f37; --red: #cf222e;
   --scroll-thumb: #ccc;
   color-scheme: light;
 }
@@ -210,6 +211,14 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .stat .value { font-size:30px; font-weight:600; line-height:1.35;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
 .stat .sub { color:var(--fg-subtle); font-size:12px }
+.stat-body { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; margin-top:8px; min-height:40px }
+.stat .spark { flex:none; line-height:0 }
+.stat .delta { margin-top:6px; font-size:11.5px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums }
+.delta.up { color:var(--green) }
+.delta.down { color:var(--red) }
+.delta.flat { color:var(--fg-subtle) }
+.grid .card { animation:fadeInUp .4s ease backwards; animation-delay:calc(var(--i, 0) * 45ms) }
 .charts { display:grid; grid-template-columns:1fr; gap:16px; margin-bottom:16px }
 @media (min-width: 880px) { .charts { grid-template-columns:1fr 1fr } }
 
@@ -461,19 +470,31 @@ function api(url, opts) {
   })
 }
 
+function avgOf(arr, key) {
+  var s = 0, n = 0
+  arr.forEach(function (r) { var v = r[key]; if (v != null) { s += v; n++ } })
+  return n ? s / n : null
+}
+
 function renderStats(rows) {
-  var defs = [
-    { key: 'sleep', label: '睡眠评分', color: PALETTE.sleep },
-    { key: 'readiness', label: '恢复度', color: PALETTE.readiness },
-    { key: 'activity', label: '活动', color: PALETTE.activity },
-    { key: 'rhr', label: '静息心率', color: PALETTE.rhr },
-    { key: 'hrv', label: 'HRV 平衡', color: PALETTE.hrv },
-  ]
   var html = ''
-  defs.forEach(function (d) {
-    var last = null
-    for (var i = rows.length - 1; i >= 0; i--) { if (rows[i][d.key] != null) { last = rows[i]; break } }
-    html += '<div class="stat card"><div class="label"><span class="dot" style="background:' + d.color + '"></span>' + d.label + '</div><div class="value">' + (last ? last[d.key] : '—') + '</div><div class="sub">' + (last ? last.date : '暂无数据') + '</div></div>'
+  METRICS.forEach(function (m, idx) {
+    var last = null, i
+    for (i = rows.length - 1; i >= 0; i--) { if (rows[i][m.key] != null) { last = rows[i]; break } }
+    var cur = avgOf(rows.slice(-7), m.key), prev = avgOf(rows.slice(-14, -7), m.key)
+    var delta = ''
+    if (cur != null && prev != null) {
+      var diff = cur - prev
+      var goodUp = m.key !== 'rhr'
+      var cls = Math.abs(diff) < 0.05 ? 'flat' : ((diff > 0) === goodUp ? 'up' : 'down')
+      var arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '·')
+      delta = '<div class="delta ' + cls + '">' + arrow + ' ' + Math.abs(diff).toFixed(1) + '<span class="muted"> 较前7天</span></div>'
+    }
+    var spark = sparkSVG(rows.slice(-7).map(function (r) { return r[m.key] }), m.color)
+    html += '<div class="stat card" style="--i:' + idx + '"><div class="label"><span class="dot" style="background:' + m.color + '"></span>' + m.name + '</div>' +
+      '<div class="stat-body"><div class="stat-main"><div class="value">' + (last ? last[m.key] : '—') + '</div><div class="sub">' + (last ? last.date : '暂无数据') + '</div>' + delta + '</div>' +
+      (spark ? '<div class="spark">' + spark + '</div>' : '') +
+      '</div></div>'
   })
   $('#stats').innerHTML = html
 }
