@@ -447,6 +447,9 @@ export function dashboardPage(): string {
       <input class="invite-input" id="inviteInput" readonly>
       <button id="copyInvite">复制</button>
     </div>
+    <div class="section-label" style="margin-top:18px">用户备注名</div>
+    <p class="modal-desc">给每个用户起个名字（如「我」「老婆」），MCP 查询时可用 alias 参数定位到具体的人。</p>
+    <div id="aliasList"></div>
     <div class="section-label" style="margin-top:18px">MCP 接入</div>
     <p class="modal-desc">把本服务作为 MCP 工具接入 Claude 等 AI Agent，让 Agent 直接查询你的 Oura 数据。</p>
     <div class="row"><a class="btn" href="/mcp-docs">查看 MCP 文档 →</a></div>
@@ -695,9 +698,60 @@ function init() {
 
   var settingsModal = $('#settingsModal')
   function closeSettings() { settingsModal.classList.remove('open') }
-  $('#miSettings').onclick = function () { closeMenu(); settingsModal.classList.add('open') }
+  $('#miSettings').onclick = function () { closeMenu(); settingsModal.classList.add('open'); renderAliases() }
   $('#settingsClose').onclick = closeSettings
   settingsModal.addEventListener('click', function (e) { if (e.target === settingsModal) closeSettings() })
+
+  function renderAliases() {
+    var box = $('#aliasList')
+    if (!box) return
+    api('/api/users').then(function (d) {
+      box.innerHTML = ''
+      var users = d.users || []
+      if (!users.length) { box.innerHTML = '<p class="subtle" style="font-size:12px;margin:0">暂无已接入用户</p>'; return }
+      users.forEach(function (u) {
+        var row = document.createElement('div')
+        row.className = 'row'
+        row.style.marginBottom = '8px'
+        var label = document.createElement('span')
+        label.className = 'subtle'
+        label.style.fontSize = '12px'
+        label.style.flex = '0 0 160px'
+        label.style.overflow = 'hidden'
+        label.style.textOverflow = 'ellipsis'
+        label.style.whiteSpace = 'nowrap'
+        label.textContent = u.email || u.id.slice(0, 8)
+        var input = document.createElement('input')
+        input.className = 'invite-input'
+        input.placeholder = '备注名，如：我 / 老婆'
+        input.maxLength = 24
+        input.value = u.alias || ''
+        var btn = document.createElement('button')
+        btn.textContent = '保存'
+        btn.onclick = function () {
+          btn.disabled = true
+          api('/api/connections/' + u.id + '/alias', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ alias: input.value }),
+          }).then(function (r) {
+            btn.textContent = '已保存 ✓'
+            USERS.forEach(function (x) { if (x.id === u.id) x.alias = r.alias || undefined })
+            setCurrent(UID)
+            setTimeout(function () { btn.textContent = '保存'; btn.disabled = false }, 1200)
+          }).catch(function (e) {
+            btn.textContent = '保存'
+            btn.disabled = false
+            alert('保存失败: ' + e.message)
+          })
+        }
+        row.appendChild(label)
+        row.appendChild(input)
+        row.appendChild(btn)
+        box.appendChild(row)
+      })
+    })
+  }
 
   function applyTheme(t) {
     document.documentElement.setAttribute('data-theme', t)
@@ -758,7 +812,7 @@ function init() {
     UID = uid
     var u = null
     for (var i = 0; i < USERS.length; i++) { if (USERS[i].id === uid) { u = USERS[i]; break } }
-    var name = u ? (u.email || u.id.slice(0, 8)) : '—'
+    var name = u ? (u.alias || u.email || u.id.slice(0, 8)) : '—'
     $('#avatarName').textContent = name
     $('#avatarInitial').textContent = name.slice(0, 1).toUpperCase()
     Array.prototype.forEach.call(document.querySelectorAll('.menu-user'), function (b) {
@@ -775,7 +829,7 @@ function init() {
       b.setAttribute('data-id', u.id)
       var label = document.createElement('span')
       label.className = 'label'
-      label.textContent = u.email || u.id.slice(0, 8)
+      label.textContent = u.alias || u.email || u.id.slice(0, 8)
       var check = document.createElement('span')
       check.className = 'check'
       check.textContent = '✓'

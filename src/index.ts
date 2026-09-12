@@ -141,10 +141,22 @@ app.get('/api/users', async (c) => {
     users: users.map((u) => ({
       id: u.id,
       email: u.email,
+      alias: u.alias,
       connectedAt: u.connectedAt,
       lastSyncAt: u.lastSyncAt,
     })),
   })
+})
+
+app.post('/api/connections/:id/alias', async (c) => {
+  const rec = await getUser(c.env, c.req.param('id'))
+  if (!rec) return c.json({ error: 'user_not_found' }, 404)
+  const body: any = await c.req.json().catch(() => ({}))
+  const alias = typeof body?.alias === 'string' ? body.alias.trim().slice(0, 24) : ''
+  if (alias) rec.alias = alias
+  else delete rec.alias
+  await saveUser(c.env, rec)
+  return c.json({ ok: true, alias: rec.alias ?? null })
 })
 
 app.post('/api/connections/:id/disconnect', async (c) => {

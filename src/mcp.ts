@@ -47,17 +47,19 @@ function toolDefinitions() {
   return [
     {
       name: 'list_users',
-      description: '列出已接入本服务的所有 Oura 用户（id、邮箱、连接与最近同步时间）',
+      description: '列出已接入本服务的所有 Oura 用户（id、邮箱、备注名、连接与最近同步时间）',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     },
     {
       name: 'get_daily_summary',
       description:
-        '获取按日期合并的每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡。默认最近 30 天，可用 days 或 startDate/endDate 控制',
+        '获取某个用户按日期合并的每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡。默认最近 30 天，可用 days 或 startDate/endDate 控制',
       inputSchema: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'Oura 用户 id；省略时若服务内只有一个用户则自动使用' },
+          userId: { type: 'string', description: 'Oura 用户 id' },
+          email: { type: 'string', description: '按邮箱定位用户（支持部分匹配，忽略大小写）' },
+          alias: { type: 'string', description: '按备注名定位用户（备注名在看板设置里设置，如「我」「老婆」）' },
           days: { type: 'number', description: '回溯天数（1–365，默认 30），仅在未提供 startDate 时生效' },
           startDate: { type: 'string', description: '起始日期 YYYY-MM-DD' },
           endDate: { type: 'string', description: '结束日期 YYYY-MM-DD' },
@@ -66,7 +68,7 @@ function toolDefinitions() {
     },
     {
       name: 'get_oura_data',
-      description: '查询任意 Oura v2 端点的原始数据（睡眠分期、心率、锻炼、标签等）',
+      description: '查询某个用户的任意 Oura v2 端点原始数据（睡眠分期、心率、锻炼、标签等）',
       inputSchema: {
         type: 'object',
         required: ['endpoint'],
@@ -76,7 +78,9 @@ function toolDefinitions() {
             enum: Object.keys(ENDPOINTS),
             description: 'Oura 端点名；heartrate 必须提供 startDate/endDate',
           },
-          userId: { type: 'string', description: 'Oura 用户 id；省略时若只有一个用户则自动使用' },
+          userId: { type: 'string', description: 'Oura 用户 id' },
+          email: { type: 'string', description: '按邮箱定位用户（支持部分匹配，忽略大小写）' },
+          alias: { type: 'string', description: '按备注名定位用户（备注名在看板设置里设置）' },
           startDate: { type: 'string', description: '起始日期 YYYY-MM-DD' },
           endDate: { type: 'string', description: '结束日期 YYYY-MM-DD' },
           nextToken: { type: 'string', description: '分页 token（上一页响应中的 next_token）' },
@@ -86,22 +90,41 @@ function toolDefinitions() {
   ]
 }
 
-/** 解析目标用户：省略 userId 时，单用户自动选定；多用户则返回引导文本 */
-async function resolveUser(env: Env, userId?: string): Promise<{ rec: UserRecord } | { errorText: string }> {
-  if (userId) {
-    const rec = await listUsers(env).then((all) => all.find((u) => u.id === userId))
-    if (!rec) return { errorText: `未找到用户 ${userId}，请先用 list_users 查看已接入用户` }
-    return { rec }
-  }
+/** 拼接用户列表（含备注名），用于错误提示 */
+function describeUsers(users: UserRecord[]): string {
+  return users
+    .map((u) => (u.alias ? `${u.alias}（${u.email || u.id.slice(0, 8)}）` : u.email || u.id.slice(0, 8)))
+    .join('、')
+}
+
+/** 解析目标用户：支持 userId / email（部分匹配）/ alias（备注名）；省略时单用户自动选定 */
+async function resolveUser(env: Env, args: any): Promise<{ rec: UserRecord } | { errorText: string }> {
   const users = await listUsers(env)
-  if (users.length === 0) {
+  if (!users.length) {
     return { errorText: '还没有用户连接。先访问 /auth/oura 完成 Oura 授权后再试' }
   }
-  if (users.length > 1) {
-    const list = users.map((u) => `${u.id}（${u.email ?? '未提供邮箱'}）`).join('、')
-    return { errorText: `服务中有 ${users.length} 个用户：${list}。请通过 userId 参数指定` }
+  const userId = typeof args?.userId === 'string' && args.userId ? args.userId : ''
+  const email = typeof args?.email === 'string' && args.email ? args.email.trim().toLowerCase() : ''
+  const alias = typeof args?.alias === 'string' && args.alias ? args.alias.trim().toLowerCase() : ''
+  if (userId) {
+    const rec = users.find((u) => u.id === userId)
+    if (!rec) return { errorText: `未找到用户 ${userId}，可用：${describeUsers(users)}` }
+    return { rec }
   }
-  return { rec: users[0] }
+  if (email) {
+    const matches = users.filter((u) => (u.email || '').toLowerCase().includes(email))
+    if (matches.length === 1) return { rec: matches[0] }
+    if (matches.length > 1) return { errorText: `邮箱「${email}」匹配到多个用户：${describeUsers(matches)}，请更精确地指定` }
+    return { errorText: `没有邮箱包含「${email}」的用户，可用：${describeUsers(users)}` }
+  }
+  if (alias) {
+    const matches = users.filter((u) => (u.alias || '').toLowerCase().includes(alias))
+    if (matches.length === 1) return { rec: matches[0] }
+    if (matches.length > 1) return { errorText: `备注名「${alias}」匹配到多个用户：${describeUsers(matches)}，请更精确地指定` }
+    return { errorText: `没有备注名包含「${alias}」的用户，可用：${describeUsers(users)}` }
+  }
+  if (users.length === 1) return { rec: users[0] }
+  return { errorText: `服务中有 ${users.length} 个用户：${describeUsers(users)}。请用 userId、email 或 alias 参数指定` }
 }
 
 async function callTool(env: Env, name: string, args: any): Promise<{ content: any[]; isError?: boolean }> {
@@ -117,6 +140,7 @@ async function callTool(env: Env, name: string, args: any): Promise<{ content: a
                 users: users.map((u) => ({
                   id: u.id,
                   email: u.email ?? null,
+                  alias: u.alias ?? null,
                   connectedAt: new Date(u.connectedAt * 1000).toISOString(),
                   lastSyncAt: u.lastSyncAt ? new Date(u.lastSyncAt * 1000).toISOString() : null,
                 })),
@@ -130,14 +154,29 @@ async function callTool(env: Env, name: string, args: any): Promise<{ content: a
     }
 
     if (name === 'get_daily_summary') {
-      const u = await resolveUser(env, args?.userId)
+      const u = await resolveUser(env, args)
       if ('errorText' in u) return { content: [text(u.errorText)], isError: true }
       const daysRaw = Number.parseInt(String(args?.days ?? '30'), 10)
       const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30
       const start = typeof args?.startDate === 'string' && args.startDate ? args.startDate : isoDay(-(days - 1))
       const end = typeof args?.endDate === 'string' && args.endDate ? args.endDate : isoDay(0)
       const rows = await getSummaryRows(env, u.rec, { start, end })
-      return { content: [text(JSON.stringify({ start, end, days: rows }, null, 2))] }
+      return {
+        content: [
+          text(
+            JSON.stringify(
+              {
+                user: { id: u.rec.id, email: u.rec.email ?? null, alias: u.rec.alias ?? null },
+                start,
+                end,
+                days: rows,
+              },
+              null,
+              2,
+            ),
+          ),
+        ],
+      }
     }
 
     if (name === 'get_oura_data') {
@@ -145,7 +184,7 @@ async function callTool(env: Env, name: string, args: any): Promise<{ content: a
       if (!ENDPOINTS[endpoint]) {
         return { content: [text(`未知端点 ${endpoint}，可用：${Object.keys(ENDPOINTS).join(', ')}`)], isError: true }
       }
-      const u = await resolveUser(env, args?.userId)
+      const u = await resolveUser(env, args)
       if ('errorText' in u) return { content: [text(u.errorText)], isError: true }
       const params: Record<string, string> = {}
       for (const [k, key] of [

@@ -8,7 +8,7 @@ export function mcpDocsPage(origin: string): string {
     null,
     2,
   )
-  const agentPrompt = `你已连接名为「oura」的 MCP 服务器（我的 Oura Ring 健康数据服务）。
+  const agentPrompt = `你已连接名为「oura」的 MCP 服务器（我们全家的 Oura Ring 健康数据服务，支持多人）。
 
 端点与鉴权（供参考）：
 - 传输：MCP Streamable HTTP（无状态）
@@ -16,16 +16,16 @@ export function mcpDocsPage(origin: string): string {
 - 鉴权：HTTP Header「Authorization: Bearer <ADMIN_KEY>」；若客户端无法设置 Header，改用 URL：${endpoint}?key=<ADMIN_KEY>
 
 可用工具：
-1. list_users() —— 列出已接入的用户（id、邮箱、最近同步时间）
-2. get_daily_summary({ userId?, days?, startDate?, endDate? }) —— 每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡
-3. get_oura_data({ endpoint, userId?, startDate?, endDate?, nextToken? }) —— 查询任意 Oura v2 端点原始数据；endpoint 可选 daily_sleep / daily_readiness / daily_activity / daily_stress / sleep / heartrate / workout / session / tag 等；heartrate 必须提供 startDate 和 endDate；返回含 next_token 时把它传入 nextToken 继续翻页
+1. list_users() —— 列出已接入的用户（id、邮箱、备注名、最近同步时间）
+2. get_daily_summary({ userId?/email?/alias?, days?, startDate?, endDate? }) —— 每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡
+3. get_oura_data({ endpoint, userId?/email?/alias?, startDate?, endDate?, nextToken? }) —— 查询任意 Oura v2 端点原始数据；endpoint 可选 daily_sleep / daily_readiness / daily_activity / daily_stress / sleep / heartrate / workout / session / tag 等；heartrate 必须提供 startDate 和 endDate；返回含 next_token 时把它传入 nextToken 继续翻页
 
 使用约定：
-- 先调用 list_users 确定用户 id；只有一个用户时其余工具可省略 userId
-- 「最近 N 天」类问题用 get_daily_summary
-- 需要明细数据（心率曲线、睡眠分期、锻炼记录等）用 get_oura_data
+- 多人数据：每个用户可用 email（部分匹配，忽略大小写）或 alias（备注名）定位；备注名如「我」「老婆」，不确定时先调用 list_users 查看
+- 只有一个人接入时，定位参数可全部省略
+- 「最近 N 天」类问题用 get_daily_summary；需要明细数据（心率曲线、睡眠分期、锻炼记录等）用 get_oura_data
 
-现在请执行：调用 list_users，然后用 get_daily_summary 查询最近 7 天数据，用表格总结我的睡眠与恢复趋势，并指出最异常的一天。`
+现在请执行：调用 list_users，然后用 get_daily_summary 查询每个用户最近 7 天数据，分人用表格总结睡眠与恢复趋势。`
 
   return shell(
     'Oura MCP 接入文档',
@@ -45,19 +45,19 @@ export function mcpDocsPage(origin: string): string {
     <p class="desc" style="margin:14px 0 0">鉴权二选一：请求头 <code>Authorization: Bearer &lt;ADMIN_KEY&gt;</code>；客户端不支持自定义 Header 时，改用 <code>${esc(endpoint)}?key=&lt;ADMIN_KEY&gt;</code>。ADMIN_KEY 即看板登录密钥。</p>
   </div>
 
-  <div class="panel">
-    <h2>可用工具</h2>
-    <p class="desc">所有工具共享看板的 KV 缓存与 token 自动刷新，Oura 限流时返回错误提示稍后重试即可</p>
-    <div style="overflow:auto">
-    <table>
-      <tr><th>工具</th><th>说明</th><th>参数</th></tr>
-      <tr><td class="mono">list_users</td><td>列出已接入用户（id、邮箱、最近同步时间）</td><td class="mono">—</td></tr>
-      <tr><td class="mono">get_daily_summary</td><td>每日概览：睡眠 / 恢复度 / 活动评分、静息心率、HRV 平衡</td><td class="mono">userId? · days? · startDate? · endDate?</td></tr>
-      <tr><td class="mono">get_oura_data</td><td>查询任意 Oura v2 端点原始数据</td><td class="mono">endpoint（必填）· userId? · startDate? · endDate? · nextToken?</td></tr>
-    </table>
+    <div class="panel">
+      <h2>可用工具</h2>
+      <p class="desc">所有工具共享看板的 KV 缓存与 token 自动刷新，Oura 限流时返回错误提示稍后重试即可。多用户时可用 email（部分匹配）或 alias（备注名，在看板 → 设置 → 用户备注名 里设置，如「我」「老婆」）定位到具体的人</p>
+      <div style="overflow:auto">
+      <table>
+        <tr><th>工具</th><th>说明</th><th>参数</th></tr>
+        <tr><td class="mono">list_users</td><td>列出已接入用户（id、邮箱、备注名、最近同步时间）</td><td class="mono">—</td></tr>
+        <tr><td class="mono">get_daily_summary</td><td>每日概览：睡眠 / 恢复度 / 活动评分、静息心率、HRV 平衡</td><td class="mono">userId? · email? · alias? · days? · startDate? · endDate?</td></tr>
+        <tr><td class="mono">get_oura_data</td><td>查询任意 Oura v2 端点原始数据</td><td class="mono">endpoint（必填）· userId? · email? · alias? · startDate? · endDate? · nextToken?</td></tr>
+      </table>
+      </div>
+      <p class="desc" style="margin:12px 0 0">端点可选值与看板探索器一致：daily_sleep / daily_readiness / daily_activity / daily_stress / daily_resilience / daily_spo2 / daily_cardiovascular_age / vo2_max / sleep / sleep_time / heartrate / session / workout / tag / enhanced_tag / rest_mode_period / ring_configuration / personal_info</p>
     </div>
-    <p class="desc" style="margin:12px 0 0">端点可选值与看板探索器一致：daily_sleep / daily_readiness / daily_activity / daily_stress / daily_resilience / daily_spo2 / daily_cardiovascular_age / vo2_max / sleep / sleep_time / heartrate / session / workout / tag / enhanced_tag / rest_mode_period / ring_configuration / personal_info</p>
-  </div>
 
   <div class="panel">
     <h2>Claude Code / CLI 接入</h2>

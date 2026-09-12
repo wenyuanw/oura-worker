@@ -10,6 +10,8 @@ export type UserRecord = {
   /** Oura 用户 id（来自 personal_info） */
   id: string
   email?: string
+  /** 备注名（如「我」「老婆」），MCP/看板展示与定位用 */
+  alias?: string
   tokens: TokenSet
   connectedAt: number
   lastSyncAt?: number
