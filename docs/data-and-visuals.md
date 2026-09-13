@@ -83,3 +83,12 @@
 3. **新版 daily_sleep 已精简**：只有 score + contributors（贡献分），分期时长/就寝窗口/眠动图都在 `sleep` 端点（实测确认：deep/rem/light_sleep_duration、bedtime_start/end、sleep_phase_5_min、efficiency、average_hrv 等齐全）。
 4. **时区**：bedtime_start/end 自带 ISO 偏移（如 +08:00）；睡眠节奏图的小时数在后端按「时间戳自身时区 + 锚定日前一日正午」预计算（bedStartH/bedEndH），不受查看者浏览器时区影响。
 
+
+## 六、实现状态（2026-09-13）
+
+以上设计已全部落地并验证：
+
+- 后端（commit `bb9956d`）：`SUMMARY_ENDPOINTS` 扩至 9 端点、逐端点容错合并、`profile.age`、`vO2_max` 路径修正、新默认 scope（`spo2 stress heart_health`）。
+- 前端图表（commit `b4edb24`）：睡眠结构堆叠柱（点击切眠动图）、5 分钟眠动图（分段着色阶梯图 + 入睡/总睡眠/效率/HRV 摘要行）、压力与恢复双向柱、睡眠节奏通栏浮动条（正午→正午轴、最近在顶部）。
+- 前端卡片与移动端（commit `3c57a97`）：9 张指标卡（韧性显示等级名与分布、血管年龄 delta 对比实际年龄）、移动端 9 圆环 + 全指标卡、最近锻炼列表（强度圆点）、明细表新增血氧/VO2/血管年龄列。
+- 验证方式：真实 token 逐端点核对官方 OpenAPI 规范（v1.37）；浏览器（1280px 桌面 + 390px 移动）对真实 `dashboardPage()` 输出做交互验证（点击切换眠动图、tooltip、主题切换、tab 切换、范围切换）；本地 `wrangler dev` + KV 种子数据对真实 Worker 后端做 summary 端到端联调（字段、profile.age、容错）。
