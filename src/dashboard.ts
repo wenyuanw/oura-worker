@@ -256,6 +256,14 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 .notice h2 { font-size:15px; margin:14px 0 6px }
 .notice p { color:var(--fg-muted); font-size:13px; margin:0 0 16px }
 
+/* ---- 锻炼列表 ---- */
+.wrow { display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--border); font-size:13px }
+.wrow:last-child { border-bottom:none }
+.wdot { width:8px; height:8px; border-radius:50%; flex:none }
+.wname { font-weight:500; flex:none }
+.wmeta { color:var(--fg-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.wdate { color:var(--fg-subtle); font-size:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace }
+
 /* ---- 图表容器：固定高度，避免窄屏下按比例压扁 ---- */
 .chart-box { position:relative; height:230px }
 /* 睡眠节奏：横向逐日条数多，通栏展示更易读 */
@@ -465,6 +473,12 @@ export function dashboardPage(): string {
       </div>
     </div>
 
+    <div class="panel" id="workoutPanel" style="display:none">
+      <h2>最近锻炼</h2>
+      <p class="desc" id="workoutDesc">加载中…</p>
+      <div id="workoutList"></div>
+    </div>
+
     <div class="panel" id="tablePanel" style="display:none">
       <h2>明细</h2>
       <p class="desc">最近 14 天</p>
@@ -547,12 +561,6 @@ function api(url, opts) {
   })
 }
 
-function avgOf(arr, key) {
-  var s = 0, n = 0
-  arr.forEach(function (r) { var v = r[key]; if (v != null) { s += v; n++ } })
-  return n ? s / n : null
-}
-
 function chartTheme() {
   var cs = getComputedStyle(document.documentElement)
   return {
@@ -585,21 +593,43 @@ function renderStats(rows) {
   var html = ''
   METRICS.forEach(function (m, idx) {
     var last = null, i
-    for (i = rows.length - 1; i >= 0; i--) { if (rows[i][m.key] != null) { last = rows[i]; break } }
-    var cur = avgOf(rows.slice(-7), m.key), prev = avgOf(rows.slice(-14, -7), m.key)
+    for (i = rows.length - 1; i >= 0; i--) { if (numOf(rows[i], m) != null) { last = rows[i]; break } }
     var delta = ''
-    if (cur != null && prev != null) {
-      var diff = cur - prev
-      var goodUp = m.key !== 'rhr'
-      var cls = Math.abs(diff) < 0.05 ? 'flat' : ((diff > 0) === goodUp ? 'up' : 'down')
-      var arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '·')
-      delta = '<div class="delta ' + cls + '">' + arrow + ' ' + Math.abs(diff).toFixed(1) + '<span class="muted"> 较前7天</span></div>'
+    if (m.cat) {
+      // 分类指标（韧性）不显示数值 delta
+    } else if (m.key === 'vascularAge') {
+      // 血管年龄：delta 行直接对比实际年龄（低为好）
+      var ageNum = Number(window.__PROFILE && window.__PROFILE.age)
+      if (Number.isFinite(ageNum) && last) {
+        var ageDiff = last.vascularAge - ageNum
+        var cls2 = ageDiff <= 0 ? 'up' : 'down'
+        var sign = ageDiff > 0 ? '+' : ''
+        delta = '<div class="delta ' + cls2 + '">' + sign + ageDiff + ' 岁<span class="muted"> 较实际年龄</span></div>'
+      }
+    } else {
+      var curArr = rows.slice(-7).map(function (r) { return numOf(r, m) }).filter(function (v) { return v != null })
+      var prevArr = rows.slice(-14, -7).map(function (r) { return numOf(r, m) }).filter(function (v) { return v != null })
+      var cur = curArr.length ? curArr.reduce(function (a, b) { return a + b }, 0) / curArr.length : null
+      var prev = prevArr.length ? prevArr.reduce(function (a, b) { return a + b }, 0) / prevArr.length : null
+      if (cur != null && prev != null) {
+        var diff = cur - prev
+        var goodUp = m.good !== 'down'
+        var cls = Math.abs(diff) < 0.05 ? 'flat' : ((diff > 0) === goodUp ? 'up' : 'down')
+        var arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '·')
+        delta = '<div class="delta ' + cls + '">' + arrow + ' ' + Math.abs(diff).toFixed(1) + '<span class="muted"> 较前7天</span></div>'
+      }
     }
-    var spark = sparkSVG(rows.slice(-7).map(function (r) { return r[m.key] }), m.color)
+    var sparkVals = rows.slice(-7).map(function (r) { return numOf(r, m) })
+    var spark = m.cat ? '' : sparkSVG(sparkVals, m.color)
+    var sub
+    if (!last) sub = '暂无数据'
+    else if (m.key === 'vascularAge') sub = '岁'
+    else sub = last.date.slice(5)
+    var val = last ? displayOf(last, m) : '—'
     html += '<div class="stat card" style="--i:' + idx + '"><div class="label"><span class="dot" style="background:' + m.color + '"></span>' + m.name + '</div>' +
-      '<div class="stat-body"><div class="stat-main"><div class="value">' + (last ? last[m.key] : '—') + '</div><div class="sub">' + (last ? last.date.slice(5) : '暂无数据') + '</div>' + delta + '</div>' +
+      '<div class="stat-body"><div class="stat-main"><div class="value">' + val + '</div><div class="sub">' + sub + '</div></div>' +
       (spark ? '<div class="spark">' + spark + '</div>' : '') +
-      '</div></div>'
+      '</div>' + delta + '</div>'
   })
   $('#stats').innerHTML = html
 }
@@ -607,8 +637,8 @@ function renderStats(rows) {
 function renderTable(rows) {
   var t = rows.slice(-14)
   if (!t.length) return
-  var keys = ['date', 'sleep', 'readiness', 'activity', 'rhr', 'hrv']
-  var heads = { date: '日期', sleep: '睡眠', readiness: '恢复度', activity: '活动', rhr: '静息心率', hrv: 'HRV' }
+  var keys = ['date', 'sleep', 'readiness', 'activity', 'rhr', 'hrv', 'spo2', 'vo2max', 'vascularAge']
+  var heads = { date: '日期', sleep: '睡眠', readiness: '恢复度', activity: '活动', rhr: '静息心率', hrv: 'HRV', spo2: '血氧 %', vo2max: 'VO2', vascularAge: '血管年龄' }
   var html = '<tr>' + keys.map(function (k) { return '<th>' + heads[k] + '</th>' }).join('') + '</tr>'
   html += t.slice().reverse().map(function (r) {
     return '<tr>' + keys.map(function (k) { return '<td>' + (r[k] == null ? '—' : r[k]) + '</td>' }).join('') + '</tr>'
@@ -634,6 +664,11 @@ function areaFill(hex, alphaTop) {
   }
 }
 
+/** 窄屏下 x 轴最多容纳的刻度数 */
+function tickLimit() {
+  return window.matchMedia('(max-width: 720px)').matches ? 5 : 12
+}
+
 function renderCharts(rows) {
   if (typeof Chart === 'undefined') { $('#chartmsg').style.display = 'block'; $('#tablePanel').style.display = 'block'; return }
   if (!rows.length) return
@@ -652,7 +687,7 @@ function renderCharts(rows) {
   var crossOpt = { line: { color: T.tick, width: 1, dashPattern: [3, 3] }, snap: { enabled: true },
     sync: { enabled: false }, zoom: { enabled: false } }
   var scales = function (yOpts) {
-    return { x: { grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 12, maxRotation: 0 } },
+    return { x: { grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: tickLimit(), maxRotation: 0 } },
              y: Object.assign({ grid: { color: T.grid }, ticks: { color: T.tick } }, yOpts || {}) }
   }
   var ds = function (label, key, color) {
@@ -718,7 +753,7 @@ function renderCharts(rows) {
         var hit = rows[els[0].index]
         renderHypno(hit ? hit.date : null)
       },
-      scales: { x: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 12, maxRotation: 0 } },
+      scales: { x: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: tickLimit(), maxRotation: 0 } },
                 y: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, callback: function (v) { return v + 'h' } }, suggestedMax: 9 } },
       plugins: { legend: legendOpt.legend,
         tooltip: Object.assign({}, tip, {
@@ -752,7 +787,7 @@ function renderCharts(rows) {
     ] },
     options: { responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      scales: { x: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 12, maxRotation: 0 } },
+      scales: { x: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: tickLimit(), maxRotation: 0 } },
                 y: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, callback: function (v) { return Math.abs(v) + 'm' } } } },
       plugins: { legend: legendOpt.legend,
         tooltip: Object.assign({}, tip, { displayColors: true,
@@ -851,7 +886,7 @@ function renderHypno(date) {
     options: { responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 10, maxRotation: 0, autoSkip: true } },
+        x: { grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: tickLimit(), maxRotation: 0, autoSkip: true } },
         y: { min: -0.4, max: 3.4, grid: { color: T.grid }, border: { display: false },
           ticks: { color: T.tick, stepSize: 1, callback: function (v) { return STAGE_NAMES[v] || '' } } } },
       plugins: { legend: { display: false },
@@ -864,13 +899,35 @@ function renderHypno(date) {
   })
 }
 
+var RESILIENCE_CN = { limited: '有限', adequate: '充足', solid: '稳固', strong: '强', exceptional: '卓越' }
+var RESILIENCE_ORD = { limited: 1, adequate: 2, solid: 3, strong: 4, exceptional: 5 }
 var METRICS = [
   { key: 'sleep', name: '睡眠评分', color: PALETTE.sleep },
   { key: 'readiness', name: '恢复度', color: PALETTE.readiness },
   { key: 'activity', name: '活动', color: PALETTE.activity },
-  { key: 'rhr', name: '静息心率', color: PALETTE.rhr },
+  { key: 'rhr', name: '静息心率', color: PALETTE.rhr, good: 'down' },
   { key: 'hrv', name: 'HRV 平衡', color: PALETTE.hrv },
+  { key: 'spo2', name: '血氧 %', color: '#0ea5e9' },
+  { key: 'resilience', name: '韧性', color: '#d946ef', cat: true },
+  { key: 'vascularAge', name: '血管年龄', color: '#f43f5e', good: 'down' },
+  { key: 'vo2max', name: 'VO2 max', color: '#84cc16' },
 ]
+
+/** 指标的数值形式（韧性映射为等级序数 1–5，用于均值/sparkline） */
+function numOf(r, m) {
+  var v = r[m.key]
+  if (v == null) return null
+  if (m.cat) return RESILIENCE_ORD[v] || null
+  return typeof v === 'number' ? v : null
+}
+
+/** 指标的展示形式（韧性显示等级名） */
+function displayOf(r, m) {
+  var v = r[m.key]
+  if (v == null) return '—'
+  if (m.cat) return RESILIENCE_CN[v] || '—'
+  return String(v)
+}
 
 function weekdayCN(iso) {
   var d = new Date(iso + 'T00:00:00Z')
@@ -928,29 +985,40 @@ function renderMobile(rows) {
   var cards = ''
   METRICS.forEach(function (m) {
     var lastRow = null, i, r
-    for (i = rows.length - 1; i >= 0; i--) { if (rows[i][m.key] != null) { lastRow = rows[i]; break } }
-    var latest = lastRow ? lastRow[m.key] : '—'
+    for (i = rows.length - 1; i >= 0; i--) { if (numOf(rows[i], m) != null) { lastRow = rows[i]; break } }
+    var latest = lastRow ? displayOf(lastRow, m) : '—'
     circles += '<div class="circle-item" data-key="' + m.key + '"><div class="circle" style="border-color:' + m.color + '"><span class="cval">' + latest + '</span></div><div class="clabel">' + m.name + '</div></div>'
-    var sparkVals = rows.slice(-7).map(function (r) { return r[m.key] })
-    var inRange = rows.filter(function (r) { return r[m.key] != null })
-    var avg = 0, mx = -Infinity, mn = Infinity, mxD = '', mnD = ''
-    inRange.forEach(function (r) {
-      var v = r[m.key]
-      avg += v
-      if (v > mx) { mx = v; mxD = r.date }
-      if (v < mn) { mn = v; mnD = r.date }
-    })
-    avg = inRange.length ? (avg / inRange.length).toFixed(1) : '—'
-    var narrative = inRange.length
-      ? '最近 ' + inRange.length + ' 天平均 ' + avg + '，最高 ' + mx + '（' + mxD.slice(5) + '）、最低 ' + mn + '（' + mnD.slice(5) + '）。'
-      : '暂无数据。'
+    var sparkVals = rows.slice(-7).map(function (r) { return numOf(r, m) })
+    var inRange = rows.filter(function (r) { return numOf(r, m) != null })
+    var narrative
+    if (m.cat) {
+      var counts = {}
+      inRange.forEach(function (r) { var l = r[m.key]; if (l) counts[l] = (counts[l] || 0) + 1 })
+      narrative = inRange.length
+        ? Object.keys(RESILIENCE_ORD).filter(function (l) { return counts[l] })
+            .map(function (l) { return RESILIENCE_CN[l] + '×' + counts[l] }).join('，') + '。'
+        : '暂无数据。'
+    } else {
+      var avg = 0, mx = -Infinity, mn = Infinity, mxD = '', mnD = ''
+      inRange.forEach(function (r) {
+        var v = numOf(r, m)
+        avg += v
+        if (v > mx) { mx = v; mxD = r.date }
+        if (v < mn) { mn = v; mnD = r.date }
+      })
+      avg = inRange.length ? (avg / inRange.length).toFixed(1) : '—'
+      narrative = inRange.length
+        ? '最近 ' + inRange.length + ' 天平均 ' + avg + '，最高 ' + mx + '（' + mxD.slice(5) + '）、最低 ' + mn + '（' + mnD.slice(5) + '）。'
+        : '暂无数据。'
+    }
     var bmin = Infinity, bmax = -Infinity
-    inRange.forEach(function (r) { var v = r[m.key]; if (v < bmin) bmin = v; if (v > bmax) bmax = v })
+    inRange.forEach(function (r) { var v = numOf(r, m); if (v < bmin) bmin = v; if (v > bmax) bmax = v })
     var bars = ''
     rows.forEach(function (r, idx) {
-      var v = r[m.key]
+      var v = numOf(r, m)
       var h = v == null ? 4 : Math.max(6, Math.round(((v - bmin) / ((bmax - bmin) || 1)) * 100))
-      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + r.date + (v == null ? '' : '：' + v) + '"><div class="bar" style="height:' + h + '%;--i:' + idx + '"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
+      var tip = r.date + (v == null ? '' : '：' + displayOf(r, m))
+      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + tip + '"><div class="bar" style="height:' + h + '%;--i:' + idx + '"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
     })
     cards += '<div class="mcard" data-key="' + m.key + '">' +
       '<div class="mcard-head"><span class="dot" style="background:' + m.color + '"></span><span class="mcard-name">' + m.name + '</span><span class="mcard-date">' + (lastRow ? lastRow.date.slice(5) : '') + '</span><span class="chev">›</span></div>' +
@@ -972,6 +1040,55 @@ function renderMobile(rows) {
   })
 }
 
+var WORKOUT_CN = { running: '跑步', trail_running: '越野跑', walking: '步行', cycling: '骑行', swim: '游泳', rowing: '划船', yoga: '瑜伽', workout: '通用训练', strength_training: '力量训练', functional_training: '功能训练', tennis: '网球', basketball: '篮球', soccer: '足球', hiking: '徒步', elliptical: '椭圆机', stair_climbing: '爬楼' }
+var INTENSITY_CN = { easy: '轻松', moderate: '中等', hard: '高强度' }
+var INTENSITY_COLOR = { easy: '#3fb950', moderate: '#f5a623', hard: '#ee0000' }
+
+function isoDayLocal(offsetDays) {
+  var d = new Date(Date.now() + offsetDays * 864e5)
+  return d.toISOString().slice(0, 10)
+}
+
+function loadWorkouts() {
+  var panel = $('#workoutPanel'), list = $('#workoutList')
+  if (!panel || !list) return
+  panel.style.display = 'none'
+  api('/api/data/' + UID + '/workout?start_date=' + isoDayLocal(-(DAYS - 1)) + '&end_date=' + isoDayLocal(0))
+    .then(function (d) {
+      var items = (d && d.data ? d.data : []).slice().reverse()
+      if (!items.length) return
+      var html = ''
+      items.forEach(function (w) {
+        var mins = null
+        if (w.start_datetime && w.end_datetime) {
+          mins = Math.round((new Date(w.end_datetime) - new Date(w.start_datetime)) / 60000)
+          if (!(mins > 0)) mins = null
+        }
+        var meta = []
+        if (mins != null) meta.push(mins + ' 分钟')
+        if (w.intensity && INTENSITY_CN[w.intensity]) meta.push(INTENSITY_CN[w.intensity])
+        if (typeof w.calories === 'number') meta.push(Math.round(w.calories) + ' 千卡')
+        if (typeof w.distance === 'number' && w.distance > 0) meta.push((w.distance / 1000).toFixed(1) + ' 公里')
+        var name = WORKOUT_CN[w.activity] || String(w.activity || '锻炼').replace(/_/g, ' ')
+        var color = INTENSITY_COLOR[w.intensity] || 'var(--fg-subtle)'
+        var day = (w.day || (w.start_datetime || '').slice(0, 10) || '').slice(5)
+        html += '<div class="wrow"><span class="wdot" style="background:' + color + '"></span>' +
+          '<span class="wname">' + name + '</span>' +
+          '<span class="wmeta">' + (meta.join(' · ') || '—') + '</span>' +
+          '<span class="wdate">' + day + '</span></div>'
+      })
+      list.innerHTML = html
+      $('#workoutDesc').textContent = '近 ' + DAYS + ' 天共 ' + items.length + ' 次 · 圆点颜色代表强度（绿=轻松 / 橙=中等 / 红=高强度）'
+      panel.style.display = ''
+      // 移动端当前不在趋势页时重新套用 tab 显隐（桌面端 no-op）
+      try { if (window.__applyMobTab) window.__applyMobTab(window.__mobTab || 'home', { silent: true }) } catch (e) {}
+    })
+    .catch(function () {
+      // 无 workout 权限或网络失败：安静地隐藏面板
+      panel.style.display = 'none'
+    })
+}
+
 function loadAll() {
   api('/api/data/' + UID + '/summary?days=' + DAYS).then(function (d) {
     var rows = d.days || []
@@ -981,6 +1098,7 @@ function loadAll() {
     renderCharts(rows)
     renderTable(rows)
     renderMobile(rows)
+    loadWorkouts()
   }).catch(function (e) {
     $('#stats').innerHTML = '<div class="card" style="color:var(--red)">加载失败: ' + e.message + '</div>'
     var cc = $('#circleRow'), mc = $('#mobCards')
@@ -1127,13 +1245,16 @@ function init() {
   function applyMobTab(t, opts) {
     var switching = !(opts && opts.silent)
     mobTab = t
+    window.__mobTab = t
     var mobile = window.matchMedia('(max-width: 720px)').matches
     var home = $('#mobHome'), chartsW = $('#chartsWrap'), explorer = $('#explorerPanel'), toolbar = document.querySelector('.toolbar')
+    var workoutP = $('#workoutPanel')
     if (!mobile) {
       if (home) home.style.display = ''
       if (chartsW) chartsW.style.display = ''
       if (explorer) explorer.style.display = ''
       if (toolbar) toolbar.style.display = ''
+      // workoutPanel 的显隐由 loadWorkouts 按数据有无决定，桌面端不在这里干预
       return
     }
     // 移动端滚动会使浏览器收缩/展开地址栏并触发 resize：
@@ -1143,6 +1264,7 @@ function init() {
     if (chartsW) chartsW.style.display = t === 'trend' ? '' : 'none'
     if (toolbar) toolbar.style.display = t === 'trend' ? '' : 'none'
     if (explorer) explorer.style.display = t === 'explore' ? '' : 'none'
+    if (workoutP) workoutP.style.display = t === 'trend' ? '' : 'none'
     var el = t === 'home' ? home : (t === 'trend' ? chartsW : explorer)
     if (switching && el) { el.classList.remove('tab-anim'); void el.offsetWidth; el.classList.add('tab-anim') }
     moveInd()
@@ -1159,6 +1281,7 @@ function init() {
       applyMobTab(b.getAttribute('data-tab'))
     }
   })
+  window.__applyMobTab = applyMobTab
   window.addEventListener('resize', function () { applyMobTab(mobTab, { silent: true }) })
   applyMobTab('home')
 
@@ -1356,7 +1479,7 @@ function init() {
       type: 'line',
       data: { labels: labels, datasets: [{ label: field, data: vals, borderColor: '#0070f3', backgroundColor: areaFill('#0070f3', 0.22), borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: true, fill: true }] },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 0 } },
+        scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: tickLimit(), maxRotation: 0 } },
                   y: { grid: { color: gridColor }, ticks: { color: tickColor } } },
         plugins: { legend: { display: false },
           tooltip: { backgroundColor: (cs.getPropertyValue('--tip-bg') || '#111').trim(), titleColor: (cs.getPropertyValue('--fg') || '#ededed').trim(), bodyColor: (cs.getPropertyValue('--fg') || '#ededed').trim(), borderColor: (cs.getPropertyValue('--tip-border') || '#333').trim(), borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: false, titleFont: { weight: '600' }, callbacks: { title: function (items) { return fullLabels[items[0].dataIndex] || items[0].label } } },
