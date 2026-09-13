@@ -109,11 +109,15 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .menu-divider { height:1px; background:var(--border); margin:6px 4px }
 .toolbar { display:flex; justify-content:flex-end; margin-bottom:16px }
 .modal-overlay { position:fixed; inset:0; z-index:100; background:var(--overlay-bg); display:none;
-  align-items:flex-start; justify-content:center; padding:12vh 16px 16px }
+  align-items:flex-start; justify-content:center; padding:12vh 16px 16px;
+  overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain }
 .modal-overlay.open { display:flex }
 .modal { width:100%; max-width:520px; background:var(--surface); border:1px solid var(--border-strong);
-  border-radius:12px; padding:20px; box-shadow:var(--shadow-modal) }
-.modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
+  border-radius:12px; padding:20px; box-shadow:var(--shadow-modal);
+  max-height:calc(100vh - 32px); max-height:calc(100dvh - 32px);
+  overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain }
+.modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+  position:sticky; top:-20px; z-index:1; background:var(--surface); margin:-20px -20px 12px; padding:14px 20px 10px }
 .modal-head h3 { font-size:15px; margin:0 }
 .section-label { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--fg-subtle); margin:10px 0 6px }
 .modal-desc { font-size:13px; color:var(--fg-muted); margin:0 0 12px }
@@ -275,6 +279,7 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
   .explorer-controls input[type=date] { flex:1 1 40%; min-width:0 }
   .login { margin-top:9vh; padding:24px 20px }
   .notice { padding:28px 16px }
+  .modal-overlay { padding:16px 12px 96px }
 }
 @media (max-width: 480px) {
   .avatar-name, .caret { display:none }
@@ -427,9 +432,14 @@ export function dashboardPage(): string {
         <div class="chart-box"><canvas id="c1"></canvas></div>
       </div>
       <div class="panel">
-        <h2>静息心率 / HRV 平衡</h2>
-        <p class="desc">来自恢复度贡献因子 · 滚轮缩放 · 拖动平移 · 双击复位</p>
+        <h2>静息心率</h2>
+        <p class="desc">睡眠期间平均心率（次/分）· 滚轮缩放 · 拖动平移 · 双击复位</p>
         <div class="chart-box"><canvas id="c2"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>HRV 平衡</h2>
+        <p class="desc">来自恢复度贡献因子（1–100）· 滚轮缩放 · 拖动平移 · 双击复位</p>
+        <div class="chart-box"><canvas id="c3"></canvas></div>
       </div>
     </div>
 
@@ -499,7 +509,7 @@ export function dashboardPage(): string {
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-crosshair@2.0.0/dist/chartjs-plugin-crosshair.min.js"></script>
 <script>
 var $ = function (s) { return document.querySelector(s) }
-var USERS = [], UID = '', DAYS = 30, C1 = null, C2 = null
+var USERS = [], UID = '', DAYS = 30, C1 = null, C2 = null, C3 = null
 var PALETTE = { sleep: '#0070f3', readiness: '#50e3c2', activity: '#f5a623', rhr: '#ee0000', hrv: '#7928ca' }
 
 function api(url, opts) {
@@ -602,6 +612,7 @@ function renderCharts(rows) {
   }
   if (C1) C1.destroy()
   if (C2) C2.destroy()
+  if (C3) C3.destroy()
   C1 = new Chart($('#c1'), {
     type: 'line',
     data: { labels: labels, datasets: [
@@ -616,15 +627,24 @@ function renderCharts(rows) {
   C2 = new Chart($('#c2'), {
     type: 'line',
     data: { labels: labels, datasets: [
-      ds('静息心率', 'rhr', PALETTE.rhr),
+      ds('静息心率 (次/分)', 'rhr', PALETTE.rhr),
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: interact,
+      scales: scales({ suggestedMin: 40 }),
+      plugins: { legend: legendOpt.legend, tooltip: tip, zoom: zoomOpt, crosshair: crossOpt } },
+  })
+  C3 = new Chart($('#c3'), {
+    type: 'line',
+    data: { labels: labels, datasets: [
       ds('HRV 平衡', 'hrv', PALETTE.hrv),
     ] },
     options: { responsive: true, maintainAspectRatio: false, interaction: interact,
-      scales: scales(),
+      scales: scales({ min: 0, max: 100 }),
       plugins: { legend: legendOpt.legend, tooltip: tip, zoom: zoomOpt, crosshair: crossOpt } },
   })
   $('#c1').ondblclick = function () { if (C1) C1.resetZoom() }
   $('#c2').ondblclick = function () { if (C2) C2.resetZoom() }
+  $('#c3').ondblclick = function () { if (C3) C3.resetZoom() }
 }
 
 var METRICS = [
@@ -871,7 +891,7 @@ function init() {
   $('#themeBtn').onclick = function () {
     var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'
     applyTheme(next)
-    if (C1 || C2) loadAll()
+    if (C1 || C2 || C3) loadAll()
   }
 
   var mobTab = 'home'
@@ -885,7 +905,8 @@ function init() {
     ind.style.width = b.width + 'px'
     ind.style.transform = 'translateX(' + (b.left - br.left - 7) + 'px)'
   }
-  function applyMobTab(t) {
+  function applyMobTab(t, opts) {
+    var switching = !(opts && opts.silent)
     mobTab = t
     var mobile = window.matchMedia('(max-width: 720px)').matches
     var home = $('#mobHome'), chartsW = $('#chartsWrap'), explorer = $('#explorerPanel'), toolbar = document.querySelector('.toolbar')
@@ -896,15 +917,17 @@ function init() {
       if (toolbar) toolbar.style.display = ''
       return
     }
-    window.scrollTo(0, 0)
+    // 移动端滚动会使浏览器收缩/展开地址栏并触发 resize：
+    // 由 resize 触发时（silent）绝不能 scrollTo 或重放入场动画，否则页面一滚动就被拉回顶部造成抖动
+    if (switching) window.scrollTo(0, 0)
     if (home) home.style.display = t === 'home' ? '' : 'none'
     if (chartsW) chartsW.style.display = t === 'trend' ? '' : 'none'
     if (toolbar) toolbar.style.display = t === 'trend' ? '' : 'none'
     if (explorer) explorer.style.display = t === 'explore' ? '' : 'none'
     var el = t === 'home' ? home : (t === 'trend' ? chartsW : explorer)
-    if (el) { el.classList.remove('tab-anim'); void el.offsetWidth; el.classList.add('tab-anim') }
+    if (switching && el) { el.classList.remove('tab-anim'); void el.offsetWidth; el.classList.add('tab-anim') }
     moveInd()
-    if (t === 'trend') { setTimeout(function () { try { if (C1) C1.resize(); if (C2) C2.resize() } catch (e) {} }, 60) }
+    if (t === 'trend') { setTimeout(function () { try { if (C1) C1.resize(); if (C2) C2.resize(); if (C3) C3.resize() } catch (e) {} }, 60) }
   }
   Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function (b) {
     b.onclick = function () {
@@ -913,7 +936,7 @@ function init() {
       applyMobTab(b.getAttribute('data-tab'))
     }
   })
-  window.addEventListener('resize', function () { applyMobTab(mobTab) })
+  window.addEventListener('resize', function () { applyMobTab(mobTab, { silent: true }) })
   applyMobTab('home')
 
   function setCurrent(uid) {

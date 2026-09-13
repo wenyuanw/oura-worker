@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { connectedPage, dashboardPage, errorPage, loginPage } from './dashboard'
-import { fetchCached, getSummaryRows, listUsers, resolveAccess, SUMMARY_ENDPOINTS } from './data'
+import { fetchCached, fetchCachedPaged, getSummaryRows, listUsers, resolveAccess, SUMMARY_ENDPOINTS } from './data'
 import {
   DEFAULT_SCOPE,
   ENDPOINTS,
@@ -219,7 +219,7 @@ app.post('/api/sync/:userId', async (c) => {
     await ensureFreshToken(c.env, rec)
     for (const e of SUMMARY_ENDPOINTS) {
       try {
-        await fetchCached(c.env, rec, e, range)
+        await fetchCachedPaged(c.env, rec, e, range)
         synced[e] = true
       } catch {
         synced[e] = false
@@ -312,7 +312,7 @@ async function cronSync(env: Env): Promise<void> {
         const range = { start_date: isoDay(-1), end_date: isoDay(0) }
         for (const e of SUMMARY_ENDPOINTS) {
           try {
-            await fetchCached(env, rec, e, range)
+            await fetchCachedPaged(env, rec, e, range)
           } catch {
             // 单个用户/端点失败不影响其他用户
           }

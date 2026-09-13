@@ -53,7 +53,7 @@ function toolDefinitions() {
     {
       name: 'get_daily_summary',
       description:
-        '获取某个用户按日期合并的每日概览：睡眠评分、恢复度、活动评分、静息心率、HRV 平衡。默认最近 30 天，可用 days 或 startDate/endDate 控制',
+        '获取某个用户按日期合并的每日概览：睡眠评分、恢复度、活动评分、静息心率（睡眠期间平均心率，次/分）、HRV 平衡（1–100 贡献分）。默认最近 30 天，可用 days 或 startDate/endDate 控制',
       inputSchema: {
         type: 'object',
         properties: {
@@ -63,6 +63,19 @@ function toolDefinitions() {
           days: { type: 'number', description: '回溯天数（1–365，默认 30），仅在未提供 startDate 时生效' },
           startDate: { type: 'string', description: '起始日期 YYYY-MM-DD' },
           endDate: { type: 'string', description: '结束日期 YYYY-MM-DD' },
+        },
+      },
+    },
+    {
+      name: 'get_today_overview',
+      description:
+        '获取某个用户「今天」的每日概览（按用户本地时区）：睡眠评分、恢复度、活动评分、静息心率（睡眠期间平均心率，次/分）、HRV 平衡，并附带当前实时心率。同时返回昨天数据作对照——今日的睡眠/恢复度通常在早晨首次同步后才生成，缺失时请参考昨日',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', description: 'Oura 用户 id' },
+          email: { type: 'string', description: '按邮箱定位用户（支持部分匹配，忽略大小写）' },
+          alias: { type: 'string', description: '按备注名定位用户（备注名在看板设置里设置，如「我」「老婆」）' },
         },
       },
     },
@@ -171,6 +184,60 @@ async function callTool(env: Env, name: string, args: any, access: Access): Prom
                 start,
                 end,
                 days: rows,
+              },
+              null,
+              2,
+            ),
+          ),
+        ],
+      }
+    }
+
+    if (name === 'get_today_overview') {
+      const u = await resolveUser(env, args, access)
+      if ('errorText' in u) return { content: [text(u.errorText)], isError: true }
+      // Oura 的 day 按用户本地日期划分；personal_info 无时区字段，
+      // 这里从 daily_sleep.timestamp 的 UTC 偏移推出用户本地的「今天」
+      let offsetMin = 0
+      try {
+        const { data } = await fetchCached(env, u.rec, 'daily_sleep', { start_date: isoDay(-2), end_date: isoDay(0) })
+        const rows: any[] = data?.data ?? []
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const ts = rows[i]?.timestamp
+          const m = typeof ts === 'string' ? ts.match(/([+-])(\d{2}):?(\d{2})$/) : null
+          if (m) {
+            offsetMin = (Number(m[2]) * 60 + Number(m[3])) * (m[1] === '-' ? -1 : 1)
+            break
+          }
+        }
+      } catch {
+        // 拿不到时区就按 UTC 处理
+      }
+      const localDay = (offsetDays: number) =>
+        new Date(Date.now() + offsetMin * 60_000 + offsetDays * 86_400_000).toISOString().slice(0, 10)
+      const today = localDay(0)
+      const yesterday = localDay(-1)
+      const rows = await getSummaryRows(env, u.rec, { start: yesterday, end: today })
+      const pick = (d: string) => rows.find((r) => r.date === d) ?? null
+      let currentHeartRate: { bpm: number; timestamp: string | null; source: string | null } | null = null
+      try {
+        const { data } = await fetchCached(env, u.rec, 'heartrate', { latest: 'true' })
+        const row = data?.data?.[0]
+        if (row && typeof row.bpm === 'number') {
+          currentHeartRate = { bpm: row.bpm, timestamp: row.timestamp ?? null, source: row.source ?? null }
+        }
+      } catch {
+        // 无 heartrate 权限或暂无采样时忽略
+      }
+      return {
+        content: [
+          text(
+            JSON.stringify(
+              {
+                user: { id: u.rec.id, email: u.rec.email ?? null, alias: u.rec.alias ?? null },
+                today: pick(today),
+                yesterday: pick(yesterday),
+                currentHeartRate,
               },
               null,
               2,

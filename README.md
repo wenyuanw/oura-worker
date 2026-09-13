@@ -28,7 +28,7 @@
 - **多用户 OAuth2 接入** —— 每个用户通过授权链接接入，数据按 Oura 用户 id 隔离；token 自动刷新（Oura refresh_token 轮换也会正确落库）
 - **数据读取 API** —— 代理 Oura v2 全部 18 个数据端点，带 KV 缓存、分页、限流透传
 - **数据看板** —— 深色/浅色双主题；桌面端评分卡（迷你趋势线 + 环比箭头）+ 交互式图表（缩放/平移/十字准线）；移动端为原生 App 式交互（圆形指标环、指标卡、圆角柱状图、底部导航、骨架屏）
-- **MCP 服务器** —— 无状态 Streamable HTTP，3 个工具（`list_users` / `get_daily_summary` / `get_oura_data`），支持按 email / 备注名定位用户
+- **MCP 服务器** —— 无状态 Streamable HTTP，4 个工具（`list_users` / `get_today_overview` / `get_daily_summary` / `get_oura_data`），支持按 email / 备注名定位用户
 - **权限隔离** —— 每个用户可生成独立数据 Key，只能查询自己的数据
 - **定时任务** —— 每小时自动保活 token 并预取昨日+今日概览，看板秒开
 - **Webhook**（可选）—— 接收 Oura 数据更新推送（HMAC-SHA256 校验）
@@ -150,7 +150,7 @@ claude mcp add --transport http oura https://oura-service.<你的子域>.workers
 | --- | --- | --- |
 | GET | `/api/users` | 已接入用户列表 |
 | POST | `/api/sync/:userId?days=30` | 立即拉取近 N 天概览数据入缓存 |
-| GET | `/api/data/:userId/summary?days=30` | 聚合的每日睡眠/恢复度/活动/静息心率/HRV |
+| GET | `/api/data/:userId/summary?days=30` | 聚合的每日睡眠/恢复度/活动/静息心率（睡眠期间平均 BPM）/HRV |
 | GET | `/api/data/:userId/:endpoint` | 代理 Oura 端点，支持 `start_date`、`end_date`、`next_token` |
 | POST | `/api/connections/:id/disconnect` | 断开用户并清除缓存（管理员） |
 | POST | `/api/connections/:id/alias` | 设置用户备注名，MCP 可用 alias 定位（管理员） |
