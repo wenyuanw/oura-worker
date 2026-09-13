@@ -19,21 +19,45 @@
 
 ---
 
-| 深色 · 桌面 | 浅色 · 桌面 | 移动端 |
-| --- | --- | --- |
-| ![桌面深色](docs/screenshot-desktop-dark.png) | ![桌面浅色](docs/screenshot-desktop-light.png) | ![移动端](docs/screenshot-mobile.png) |
+| 深色 · 桌面 | 浅色 · 桌面 |
+| --- | --- |
+| ![桌面深色](docs/screenshot-desktop-dark.png) | ![桌面浅色](docs/screenshot-desktop-light.png) |
+| ![睡眠图表](docs/screenshot-charts-dark.png) | ![移动端](docs/screenshot-mobile.png) |
+| *睡眠结构 · 眠动图 · 压力与恢复* | *移动端 · 圆环 + 指标卡* |
 
 ## ✨ 功能
 
 - **多用户 OAuth2 接入** —— 每个用户通过授权链接接入，数据按 Oura 用户 id 隔离；token 自动刷新（Oura refresh_token 轮换也会正确落库）
 - **数据读取 API** —— 代理 Oura v2 全部 18 个数据端点，带 KV 缓存、分页、限流透传
-- **数据看板** —— 深色/浅色双主题；桌面端 9 张指标卡（评分/静息心率/HRV/血氧/韧性/血管年龄/VO2 max，迷你趋势线 + 环比箭头）+ 交互式图表（缩放/平移/十字准线）：综合评分、静息心率、HRV、**睡眠结构堆叠图（点击切换眠动图）、5 分钟眠动图、压力/恢复双向柱、睡眠节奏窗口图**、最近锻炼列表；移动端为原生 App 式交互（圆形指标环、指标卡、圆角柱状图、底部导航、骨架屏）
-- **MCP 服务器** —— 无状态 Streamable HTTP，4 个工具（`list_users` / `get_today_overview` / `get_daily_summary` / `get_oura_data`），支持按 email / 备注名定位用户；summary 工具附带睡眠结构/压力/血氧/韧性/血管年龄/VO2 max 等扩展字段
+- **数据看板** —— 深色/浅色双主题、移动端自适应，详见下方[看板一览](#-看板一览)
+- **MCP 服务器** —— 无状态 Streamable HTTP，4 个工具（`list_users` / `get_today_overview` / `get_daily_summary` / `get_oura_data`），支持按 email / 备注名定位用户；summary 工具附带睡眠结构、眠动图、压力、血氧、韧性、血管年龄、VO2 max 等扩展字段
 - **权限隔离** —— 每个用户可生成独立数据 Key，只能查询自己的数据
 - **定时任务** —— 每小时自动保活 token 并预取昨日+今日概览，看板秒开
 - **Webhook**（可选）—— 接收 Oura 数据更新推送（HMAC-SHA256 校验）
 
 > **2026-09 起 Oura 调整了 OAuth scope**：血氧为 `spo2`（原 `spo2Daily` 失效），韧性需要 `stress`，心血管年龄需要 `heart_health`。本仓库默认 scope 已更新；**此前接入的用户需要重新走一次授权**才能点亮这三类新数据，未重新授权时看板对应卡片显示「—」，其余功能不受影响。
+
+## 📊 看板一览
+
+**指标卡（9 张）**：睡眠评分 · 恢复度 · 活动 · 静息心率 · HRV 平衡 · 血氧 · 韧性 · 血管年龄 · VO2 max
+每张卡带专属图标、7 天迷你趋势（趋势型用折线+渐变面积，评分型用圆头渐变柱）与「较前 7 天」环比箭头；韧性以 5 段等级条展示当前等级（有限→卓越），血管年龄直接对比实际年龄。
+
+**交互式图表**（滚轮/双指缩放 · 拖动平移 · 双击复位 · 十字准线）：
+
+| 图表 | 看什么 | 特色交互 |
+| --- | --- | --- |
+| 睡眠 / 恢复度 / 活动 | 三大综合评分走势 | 多序列同图对比 |
+| 静息心率 | 睡眠期间平均心率（与 Oura App 口径一致） | — |
+| HRV 平衡 | 恢复度贡献因子 | — |
+| 睡眠结构 | 深睡 / REM / 浅睡 / 清醒时长堆叠 | **点击柱子切换下方眠动图到那一晚** |
+| 眠动图 | 单晚 5 分钟分辨率睡眠分期瀑布图 | 入睡/醒来、总睡眠、效率、平均 HRV 摘要行 |
+| 压力与恢复 | 高压力（上）vs 恢复（下）时长 | tooltip 带当日总结（已恢复/正常/高压日） |
+| 睡眠节奏 | 每晚入睡→醒来窗口 | 正午→正午时间轴，一眼看出作息规律 |
+| 最近锻炼 | 类型 / 强度 / 时长 / 消耗 / 距离 | 强度圆点着色 |
+
+移动端为原生 App 式交互：横向滚动的 9 个圆形指标环、可展开的指标卡（含等级分布、彩色柱状趋势）、底部三栏导航（摘要 / 趋势 / 探索）、骨架屏。
+
+另有**原始数据探索器**：直接查询 Oura v2 任意端点，自动识别数值字段绘图，可切原始 JSON。
 
 ## 🚀 快速开始
 
@@ -152,7 +176,7 @@ claude mcp add --transport http oura https://oura-service.<你的子域>.workers
 | --- | --- | --- |
 | GET | `/api/users` | 已接入用户列表 |
 | POST | `/api/sync/:userId?days=30` | 立即拉取近 N 天概览数据入缓存 |
-| GET | `/api/data/:userId/summary?days=30` | 聚合的每日睡眠/恢复度/活动/静息心率（睡眠期间平均 BPM）/HRV |
+| GET | `/api/data/:userId/summary?days=30` | 聚合每日概览：评分/静息心率/HRV + 睡眠结构（deep/rem/light/awake 秒）、眠动图（hypno）、就寝窗口、压力/恢复时长、血氧、韧性等级、血管年龄、VO2 max 及 `profile.age` |
 | GET | `/api/data/:userId/:endpoint` | 代理 Oura 端点，支持 `start_date`、`end_date`、`next_token` |
 | POST | `/api/connections/:id/disconnect` | 断开用户并清除缓存（管理员） |
 | POST | `/api/connections/:id/alias` | 设置用户备注名，MCP 可用 alias 定位（管理员） |
@@ -205,6 +229,7 @@ src/
 | Oura 授权页报 `400 invalid_request` | Redirect URI 与实际回调地址不一致，去 Oura 开发者后台核对 |
 | 看板提示「personal_info 未返回用户 id」 | 升级到最新代码（旧版本解析 bug），或确认授权未撤销 |
 | `401 unauthorized` | ADMIN_KEY 不对，或 Header 不是「Bearer 密钥」格式 |
+| 血氧 / 韧性 / 血管年龄卡片显示「—」 | 这三类需要 2026-09 的新 scope，重新走一次 `/auth/oura` 授权即可 |
 | 数据一直为空 | 先完成 `/auth/oura` 授权；Oura 数据需戒指同步后才有 |
 | 国内访问 workers.dev 受阻 | 给 Worker 绑定自定义域名，并把 Oura 后台回调地址同步更新 |
 
