@@ -32,7 +32,7 @@ C. 你只能发起简单 HTTP GET：直接用 REST 接口（无需 MCP）：
 ## 可用工具（MCP）
 1. list_users() —— 列出用户（id、邮箱、备注名：「我」「老婆」）
 2. get_today_overview({ userId?/email?/alias? }) —— 用户本地「今天」的概览：睡眠/恢复度/活动评分、静息心率（睡眠期间平均 BPM）、HRV 平衡、当前实时心率；附昨日数据对照（今日睡眠/恢复度早晨同步后才生成）
-3. get_daily_summary({ userId?/email?/alias?, days?, startDate?, endDate? }) —— 每日睡眠/恢复度/活动评分、静息心率（睡眠期间平均 BPM）、HRV 平衡
+3. get_daily_summary({ userId?/email?/alias?, days?, startDate?, endDate? }) —— 每日睡眠/恢复度/活动评分、静息心率（睡眠期间平均 BPM）、HRV 平衡，以及睡眠结构（deep/rem/light/awake 秒）、眠动图（hypno）、就寝窗口（bedStartH/bedEndH，正午起算小时）、压力/恢复时长（秒）、血氧、韧性等级、血管年龄、VO2 max；响应含 profile.age
 4. get_oura_data({ endpoint, userId?/email?/alias?, startDate?, endDate?, nextToken? }) —— 任意 Oura 端点原始数据；heartrate 必须带 startDate/endDate；翻页时把返回的 next_token 传入 nextToken
 
 ## 约定
@@ -68,7 +68,7 @@ C. 你只能发起简单 HTTP GET：直接用 REST 接口（无需 MCP）：
         <tr><th>工具</th><th>说明</th><th>参数</th></tr>
         <tr><td class="mono">list_users</td><td>列出已接入用户（id、邮箱、备注名、最近同步时间）</td><td class="mono">—</td></tr>
         <tr><td class="mono">get_today_overview</td><td>用户本地「今天」的概览：睡眠 / 恢复度 / 活动评分、静息心率（睡眠期间平均 BPM）、HRV 平衡、当前实时心率，附昨日对照</td><td class="mono">userId? · email? · alias?</td></tr>
-        <tr><td class="mono">get_daily_summary</td><td>每日概览：睡眠 / 恢复度 / 活动评分、静息心率（睡眠期间平均 BPM）、HRV 平衡</td><td class="mono">userId? · email? · alias? · days? · startDate? · endDate?</td></tr>
+        <tr><td class="mono">get_daily_summary</td><td>每日概览：睡眠 / 恢复度 / 活动评分、静息心率（睡眠期间平均 BPM）、HRV 平衡，以及睡眠结构（深睡/REM/浅睡/清醒秒数）、眠动图（hypno）、就寝窗口、压力/恢复时长、血氧、韧性等级、血管年龄、VO2 max（响应含 profile.age 便于解读血管年龄）</td><td class="mono">userId? · email? · alias? · days? · startDate? · endDate?</td></tr>
         <tr><td class="mono">get_oura_data</td><td>查询任意 Oura v2 端点原始数据</td><td class="mono">endpoint（必填）· userId? · email? · alias? · startDate? · endDate? · nextToken?</td></tr>
       </table>
       </div>

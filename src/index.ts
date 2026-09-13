@@ -15,6 +15,7 @@ import {
 } from './oura'
 import { registerMcpRoutes } from './mcp'
 import { mcpDocsPage } from './mcp-docs'
+import { helpPage } from './help-docs'
 import type { Access, Env, UserRecord } from './types'
 import { hmacHex, isoDay } from './util'
 
@@ -75,6 +76,9 @@ app.get('/', async (c) => {
 app.get('/healthz', (c) => c.json({ ok: true, ts: Date.now() }))
 
 app.get('/mcp-docs', (c) => c.html(mcpDocsPage(new URL(c.req.url).origin)))
+
+// 使用文档页：无需登录，受邀用户也能看
+app.get('/help', (c) => c.html(helpPage(new URL(c.req.url).origin)))
 
 // ---------------- MCP（Model Context Protocol） ----------------
 

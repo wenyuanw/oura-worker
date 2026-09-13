@@ -355,7 +355,7 @@ export function connectedPage(email: string | undefined, id: string): string {
   <div class="divider"></div>
   <p class="center" style="font-size:15px;font-weight:600;margin-bottom:4px">✓ 连接成功</p>
   <p class="subtle center">Oura 账号 <span class="mono">${esc(email || id.slice(0, 8))}</span> 已接入服务，数据将由服务定时同步，本页面可以关闭。</p>
-  <div class="center" style="margin-top:20px"><a class="btn" href="/">前往看板 →</a></div>
+  <div class="center" style="margin-top:20px"><a class="btn" href="/">前往看板 →</a> <a class="btn" href="/help" target="_blank" rel="noopener">📖 使用文档</a></div>
 </div></div>`,
   )
 }
@@ -394,6 +394,7 @@ export function dashboardPage(): string {
       <div class="menu-divider"></div>
       <button class="menu-item" id="miSync">同步数据</button>
       <button class="menu-item" id="miSettings">设置</button>
+      <button class="menu-item" id="miHelp">使用文档</button>
       <button class="menu-item danger" id="miDisconnect">断开此用户</button>
       <div class="menu-divider"></div>
       <button class="menu-item" id="miLogout">登出</button>
@@ -537,7 +538,13 @@ export function dashboardPage(): string {
       <h3>设置</h3>
       <button id="settingsClose">✕</button>
     </div>
-    <div class="section-label">邀请用户授权</div>
+    <div class="section-label">帮助与文档</div>
+    <p class="modal-desc">指标含义、图表操作、数据同步与 AI 接入说明，新窗口打开。</p>
+    <div class="row">
+      <a class="btn" href="/help" target="_blank" rel="noopener">📖 使用文档 →</a>
+      <a class="btn" href="/mcp-docs" target="_blank" rel="noopener">MCP 接入文档 →</a>
+    </div>
+    <div class="section-label" style="margin-top:18px">邀请用户授权</div>
     <p class="modal-desc">把下面的授权链接发给其他 Oura 用户，对方登录并同意授权后即接入本服务（未获 Oura 正式批准的应用最多 10 人）。</p>
     <div class="row">
       <input class="invite-input" id="inviteInput" readonly>
@@ -1235,6 +1242,7 @@ function init() {
   var settingsModal = $('#settingsModal')
   function closeSettings() { settingsModal.classList.remove('open') }
   $('#miSettings').onclick = function () { closeMenu(); settingsModal.classList.add('open'); renderAliases(); renderUserKeys() }
+  $('#miHelp').onclick = function () { closeMenu(); window.open('/help', '_blank', 'noopener') }
   $('#settingsClose').onclick = closeSettings
   settingsModal.addEventListener('click', function (e) { if (e.target === settingsModal) closeSettings() })
 
