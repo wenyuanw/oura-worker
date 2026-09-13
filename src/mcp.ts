@@ -53,7 +53,7 @@ function toolDefinitions() {
     {
       name: 'get_daily_summary',
       description:
-        '获取某个用户按日期合并的每日概览：睡眠/恢复度/活动评分、静息心率（BPM）、HRV 平衡、睡眠结构（deep/rem/light/awake 秒）、睡眠效率、睡眠窗口（bedStartH/bedEndH，正午起算小时）、5 分钟眠动图（hypno）、压力/恢复时长（秒）、血氧、韧性等级、血管年龄、VO2 max。默认最近 30 天，可用 days 或 startDate/endDate 控制',
+        '获取某个用户按日期合并的每日概览：睡眠/恢复度/活动评分、静息心率（BPM）、HRV 平衡、睡眠结构（deep/rem/light/awake 秒）、睡眠效率、睡眠窗口（bedStartH/bedEndH，正午起算小时）、5 分钟眠动图（hypno）、压力/恢复时长（秒）、血氧、韧性等级（resilience=身体承受压力并恢复的能力，limited/adequate/solid/strong/exceptional）、血管年龄、VO2 max。默认最近 30 天，可用 days 或 startDate/endDate 控制',
       inputSchema: {
         type: 'object',
         properties: {

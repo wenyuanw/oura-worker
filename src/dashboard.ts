@@ -256,6 +256,20 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 .notice h2 { font-size:15px; margin:14px 0 6px }
 .notice p { color:var(--fg-muted); font-size:13px; margin:0 0 16px }
 
+/* ---- 指标 icon 与韧性等级条 ---- */
+.mic { display:inline-flex; width:14px; height:14px; flex:none }
+.mic svg { width:100%; height:100%; display:block }
+.mcard-head .mic { width:15px; height:15px }
+.lvlbar { display:flex; gap:3px; min-width:0 }
+.lvlbar i { height:5px; flex:1; border-radius:3px; background:var(--border-strong) }
+.lvlbar i.on { background:currentColor; opacity:.34 }
+.lvlbar i.cur { opacity:1 }
+.lvlbar.mini { width:34px; gap:2px }
+.lvlbar.mini i { height:4px }
+.stat .delta-row { display:flex; align-items:center; gap:8px; margin-top:8px }
+.stat .delta-row .lvlbar { width:72px; flex:none }
+.stat .delta-row .lvltxt { font-size:11.5px; color:var(--fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
 /* ---- 锻炼列表 ---- */
 .wrow { display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--border); font-size:13px }
 .wrow:last-child { border-bottom:none }
@@ -596,7 +610,11 @@ function renderStats(rows) {
     for (i = rows.length - 1; i >= 0; i--) { if (numOf(rows[i], m) != null) { last = rows[i]; break } }
     var delta = ''
     if (m.cat) {
-      // 分类指标（韧性）不显示数值 delta
+      // 韧性：delta 行改为「等级条 + 等级说明」
+      if (last) {
+        delta = '<div class="delta-row">' + lvlBarHTML(last[m.key]) +
+          '<span class="lvltxt">' + (RESILIENCE_DESC_SHORT[last[m.key]] || '') + '</span></div>'
+      }
     } else if (m.key === 'vascularAge') {
       // 血管年龄：delta 行直接对比实际年龄（低为好）
       var ageNum = Number(window.__PROFILE && window.__PROFILE.age)
@@ -626,7 +644,11 @@ function renderStats(rows) {
     else if (m.key === 'vascularAge') sub = '岁'
     else sub = last.date.slice(5)
     var val = last ? displayOf(last, m) : '—'
-    html += '<div class="stat card" style="--i:' + idx + '"><div class="label"><span class="dot" style="background:' + m.color + '"></span>' + m.name + '</div>' +
+    if (m.cat && last) val = '<span style="color:' + (RESILIENCE_COLOR[last[m.key]] || 'inherit') + '">' + val + '</span>'
+    var icon = ICONS[m.key]
+      ? '<span class="mic" style="color:' + m.color + '">' + ICONS[m.key] + '</span>'
+      : '<span class="dot" style="background:' + m.color + '"></span>'
+    html += '<div class="stat card" style="--i:' + idx + '"><div class="label"' + (m.tip ? ' title="' + m.tip + '"' : '') + '>' + icon + m.name + '</div>' +
       '<div class="stat-body"><div class="stat-main"><div class="value">' + val + '</div><div class="sub">' + sub + '</div></div>' +
       (spark ? '<div class="spark">' + spark + '</div>' : '') +
       '</div>' + delta + '</div>'
@@ -901,6 +923,24 @@ function renderHypno(date) {
 
 var RESILIENCE_CN = { limited: '有限', adequate: '充足', solid: '稳固', strong: '强', exceptional: '卓越' }
 var RESILIENCE_ORD = { limited: 1, adequate: 2, solid: 3, strong: 4, exceptional: 5 }
+var RESILIENCE_COLOR = { limited: '#f87171', adequate: '#fbbf24', solid: '#2dd4bf', strong: '#4ade80', exceptional: '#a78bfa' }
+var RESILIENCE_DESC = { limited: '恢复能力较弱，注意休息', adequate: '恢复能力一般', solid: '恢复能力良好', strong: '恢复能力很强', exceptional: '恢复能力极佳' }
+var RESILIENCE_DESC_SHORT = { limited: '恢复较弱', adequate: '恢复一般', solid: '恢复良好', strong: '恢复很强', exceptional: '恢复极佳' }
+var RESILIENCE_TIP = '韧性（Resilience）：身体承受压力并从中恢复的能力，由睡眠恢复、日间恢复与压力反应共同评估'
+
+/** 指标 icon（线性风格，stroke 用 currentColor 随主题/指标色变化） */
+var SVGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+var ICONS = {
+  sleep: SVGO + '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
+  readiness: SVGO + '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>',
+  activity: SVGO + '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
+  rhr: SVGO + '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>',
+  hrv: SVGO + '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+  spo2: SVGO + '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>',
+  resilience: SVGO + '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>',
+  vascularAge: SVGO + '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg>',
+  vo2max: SVGO + '<path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg>',
+}
 var METRICS = [
   { key: 'sleep', name: '睡眠评分', color: PALETTE.sleep },
   { key: 'readiness', name: '恢复度', color: PALETTE.readiness },
@@ -908,10 +948,19 @@ var METRICS = [
   { key: 'rhr', name: '静息心率', color: PALETTE.rhr, good: 'down' },
   { key: 'hrv', name: 'HRV 平衡', color: PALETTE.hrv },
   { key: 'spo2', name: '血氧 %', color: '#0ea5e9' },
-  { key: 'resilience', name: '韧性', color: '#d946ef', cat: true },
-  { key: 'vascularAge', name: '血管年龄', color: '#f43f5e', good: 'down' },
-  { key: 'vo2max', name: 'VO2 max', color: '#84cc16' },
+  { key: 'resilience', name: '韧性', color: '#d946ef', cat: true, tip: RESILIENCE_TIP },
+  { key: 'vascularAge', name: '血管年龄', color: '#f43f5e', good: 'down', tip: '估算的血管健康年龄，低于实际年龄为佳' },
+  { key: 'vo2max', name: 'VO2 max', color: '#84cc16', tip: '最大摄氧量：身体利用氧气的上限能力（ml/kg/min）' },
 ]
+
+/** 韧性等级条 HTML（当前等级高亮） */
+function lvlBarHTML(level, cls) {
+  var ord = RESILIENCE_ORD[level] || 0
+  var color = RESILIENCE_COLOR[level] || 'var(--fg-muted)'
+  var segs = ''
+  for (var i = 1; i <= 5; i++) segs += '<i class="' + (i < ord ? 'on' : i === ord ? 'on cur' : '') + '"></i>'
+  return '<span class="lvlbar ' + (cls || '') + '" style="color:' + color + '">' + segs + '</span>'
+}
 
 /** 指标的数值形式（韧性映射为等级序数 1–5，用于均值/sparkline） */
 function numOf(r, m) {
@@ -987,16 +1036,34 @@ function renderMobile(rows) {
     var lastRow = null, i, r
     for (i = rows.length - 1; i >= 0; i--) { if (numOf(rows[i], m) != null) { lastRow = rows[i]; break } }
     var latest = lastRow ? displayOf(lastRow, m) : '—'
-    circles += '<div class="circle-item" data-key="' + m.key + '"><div class="circle" style="border-color:' + m.color + '"><span class="cval">' + latest + '</span></div><div class="clabel">' + m.name + '</div></div>'
+    var icon = ICONS[m.key]
+      ? '<span class="mic" style="color:' + m.color + '">' + ICONS[m.key] + '</span>'
+      : '<span class="dot" style="background:' + m.color + '"></span>'
+    // 圆环内容：韧性显示「等级名 + 迷你等级条」
+    var circleInner
+    if (m.cat && lastRow) {
+      var lv = lastRow[m.key]
+      circleInner = '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
+        '<span class="cval" style="font-size:15px;color:' + RESILIENCE_COLOR[lv] + '">' + latest + '</span>' +
+        lvlBarHTML(lv, 'mini') + '</div>'
+    } else {
+      circleInner = '<span class="cval">' + latest + '</span>'
+    }
+    circles += '<div class="circle-item" data-key="' + m.key + '"><div class="circle" style="border-color:' + m.color + '">' + circleInner + '</div><div class="clabel">' + m.name + '</div></div>'
     var sparkVals = rows.slice(-7).map(function (r) { return numOf(r, m) })
     var inRange = rows.filter(function (r) { return numOf(r, m) != null })
+    var explain = ''
     var narrative
     if (m.cat) {
+      if (lastRow) {
+        explain = '韧性衡量身体承受压力并从中恢复的能力，由睡眠恢复、日间恢复与压力反应共同评估。当前等级 <b style="color:' +
+          RESILIENCE_COLOR[lastRow[m.key]] + '">' + latest + '</b>（' + (RESILIENCE_DESC[lastRow[m.key]] || '') + '）。'
+      }
       var counts = {}
       inRange.forEach(function (r) { var l = r[m.key]; if (l) counts[l] = (counts[l] || 0) + 1 })
       narrative = inRange.length
-        ? Object.keys(RESILIENCE_ORD).filter(function (l) { return counts[l] })
-            .map(function (l) { return RESILIENCE_CN[l] + '×' + counts[l] }).join('，') + '。'
+        ? '近 ' + inRange.length + ' 天等级分布：' + Object.keys(RESILIENCE_ORD).filter(function (l) { return counts[l] })
+            .map(function (l) { return '<span style="color:' + RESILIENCE_COLOR[l] + '">' + RESILIENCE_CN[l] + '</span>×' + counts[l] }).join('，') + '。'
         : '暂无数据。'
     } else {
       var avg = 0, mx = -Infinity, mn = Infinity, mxD = '', mnD = ''
@@ -1018,12 +1085,15 @@ function renderMobile(rows) {
       var v = numOf(r, m)
       var h = v == null ? 4 : Math.max(6, Math.round(((v - bmin) / ((bmax - bmin) || 1)) * 100))
       var tip = r.date + (v == null ? '' : '：' + displayOf(r, m))
-      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + tip + '"><div class="bar" style="height:' + h + '%;--i:' + idx + '"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
+      var barColor = m.cat && v != null ? ';background:' + RESILIENCE_COLOR[r[m.key]] : ''
+      bars += '<div class="pillbar' + (v == null ? ' empty' : '') + '" title="' + tip + '"><div class="bar" style="height:' + h + '%;--i:' + idx + barColor + '"></div><div class="lbl">' + weekdayCN(r.date) + '</div></div>'
     })
+    var bigVal = latest
+    if (m.cat && lastRow) bigVal = '<span style="font-size:30px;color:' + RESILIENCE_COLOR[lastRow[m.key]] + '">' + latest + '</span>'
     cards += '<div class="mcard" data-key="' + m.key + '">' +
-      '<div class="mcard-head"><span class="dot" style="background:' + m.color + '"></span><span class="mcard-name">' + m.name + '</span><span class="mcard-date">' + (lastRow ? lastRow.date.slice(5) : '') + '</span><span class="chev">›</span></div>' +
-      '<div class="mcard-body"><div class="mcard-val"><div class="sub">最新</div><div class="big">' + latest + '</div></div>' + (sparkSVG(sparkVals, m.color) || '') + '</div>' +
-      '<div class="mcard-detail"><p class="narrative">' + narrative + '</p><div class="pillbars">' + bars + '</div></div>' +
+      '<div class="mcard-head">' + icon + '<span class="mcard-name">' + m.name + '</span><span class="mcard-date">' + (lastRow ? lastRow.date.slice(5) : '') + '</span><span class="chev">›</span></div>' +
+      '<div class="mcard-body"><div class="mcard-val"><div class="sub">最新</div><div class="big">' + bigVal + '</div></div>' + (sparkSVG(sparkVals, m.color) || '') + '</div>' +
+      '<div class="mcard-detail">' + (explain ? '<p class="narrative">' + explain + '</p>' : '') + '<p class="narrative">' + narrative + '</p><div class="pillbars">' + bars + '</div></div>' +
       '</div>'
   })
   $('#circleRow').innerHTML = circles
