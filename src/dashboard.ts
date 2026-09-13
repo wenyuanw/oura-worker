@@ -258,6 +258,8 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 
 /* ---- 图表容器：固定高度，避免窄屏下按比例压扁 ---- */
 .chart-box { position:relative; height:230px }
+/* 睡眠节奏：横向逐日条数多，通栏展示更易读 */
+#rhythmPanel { grid-column: 1 / -1 }
 
 /* ---- 移动端 ---- */
 @media (max-width: 720px) {
@@ -441,6 +443,26 @@ export function dashboardPage(): string {
         <p class="desc">来自恢复度贡献因子（1–100）· 滚轮缩放 · 拖动平移 · 双击复位</p>
         <div class="chart-box"><canvas id="c3"></canvas></div>
       </div>
+      <div class="panel">
+        <h2>睡眠结构</h2>
+        <p class="desc">深睡 / REM / 浅睡 / 清醒（小时）· 点击柱子查看当晚眠动图 · 滚轮缩放 · 拖动平移</p>
+        <div class="chart-box"><canvas id="c4"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>睡眠分期（眠动图）</h2>
+        <p class="desc" id="hypnoDesc">加载中…</p>
+        <div class="chart-box"><canvas id="c5"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>压力与恢复</h2>
+        <p class="desc">每日高压力（上，分钟）与恢复（下，分钟）· 滚轮缩放 · 拖动平移 · 双击复位</p>
+        <div class="chart-box"><canvas id="c6"></canvas></div>
+      </div>
+      <div class="panel" id="rhythmPanel">
+        <h2>睡眠节奏</h2>
+        <p class="desc">每晚入睡 → 醒来窗口 · 横轴从正午到次日正午 · 拖动平移</p>
+        <div class="chart-box" id="rhythmBox"><canvas id="c7"></canvas></div>
+      </div>
     </div>
 
     <div class="panel" id="tablePanel" style="display:none">
@@ -509,8 +531,11 @@ export function dashboardPage(): string {
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-crosshair@2.0.0/dist/chartjs-plugin-crosshair.min.js"></script>
 <script>
 var $ = function (s) { return document.querySelector(s) }
-var USERS = [], UID = '', DAYS = 30, C1 = null, C2 = null, C3 = null
-var PALETTE = { sleep: '#0070f3', readiness: '#50e3c2', activity: '#f5a623', rhr: '#ee0000', hrv: '#7928ca' }
+var USERS = [], UID = '', DAYS = 30, C1 = null, C2 = null, C3 = null, C4 = null, C6 = null, C7 = null, HY = null
+var HYPNO_DATE = ''
+var PALETTE = { sleep: '#0070f3', readiness: '#50e3c2', activity: '#f5a623', rhr: '#ee0000', hrv: '#7928ca',
+  deep: '#3b5bdb', rem: '#22d3ee', lightslp: '#74c0fc', awakeslp: '#868e96', recover: '#3fb950' }
+var STAGE_NAMES = ['深睡', '浅睡', 'REM', '清醒']
 
 function api(url, opts) {
   return fetch(url, opts).then(function (r) {
@@ -526,6 +551,34 @@ function avgOf(arr, key) {
   var s = 0, n = 0
   arr.forEach(function (r) { var v = r[key]; if (v != null) { s += v; n++ } })
   return n ? s / n : null
+}
+
+function chartTheme() {
+  var cs = getComputedStyle(document.documentElement)
+  return {
+    grid: (cs.getPropertyValue('--chart-grid') || '#1c1c1c').trim(),
+    tick: (cs.getPropertyValue('--chart-tick') || '#666').trim(),
+    tipBg: (cs.getPropertyValue('--tip-bg') || '#111').trim(),
+    tipBorder: (cs.getPropertyValue('--tip-border') || '#333').trim(),
+    tipFg: (cs.getPropertyValue('--fg') || '#ededed').trim(),
+    legend: (cs.getPropertyValue('--legend-text') || '#a1a1a1').trim(),
+  }
+}
+
+/** 秒 → "8h20m" */
+function fmtHM(sec) {
+  if (sec == null || !isFinite(sec)) return '—'
+  var m = Math.round(sec / 60)
+  return Math.floor(m / 60) + 'h' + (m % 60 < 10 ? '0' : '') + (m % 60) + 'm'
+}
+
+/** 正午起算的小时数 → "HH:MM"（12 → 00:00） */
+function fmtClock(hSinceNoon) {
+  if (hSinceNoon == null || !isFinite(hSinceNoon)) return '—'
+  var t = ((hSinceNoon + 12) % 24 + 24) % 24
+  var hh = Math.floor(t), mm = Math.round((t - hh) * 60)
+  if (mm === 60) { mm = 0; hh = (hh + 1) % 24 }
+  return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm
 }
 
 function renderStats(rows) {
@@ -583,28 +636,24 @@ function areaFill(hex, alphaTop) {
 
 function renderCharts(rows) {
   if (typeof Chart === 'undefined') { $('#chartmsg').style.display = 'block'; $('#tablePanel').style.display = 'block'; return }
+  if (!rows.length) return
   var labels = rows.map(function (r) { return r.date.slice(5) })
   var fullLabels = rows.map(function (r) { return r.date })
   var mk = function (key) { return rows.map(function (r) { return r[key] == null ? null : r[key] }) }
-  var cs = getComputedStyle(document.documentElement)
-  var gridColor = (cs.getPropertyValue('--chart-grid') || '#1c1c1c').trim()
-  var tickColor = (cs.getPropertyValue('--chart-tick') || '#666').trim()
-  var tipBg = (cs.getPropertyValue('--tip-bg') || '#111').trim()
-  var tipBorder = (cs.getPropertyValue('--tip-border') || '#333').trim()
-  var tipFg = (cs.getPropertyValue('--fg') || '#ededed').trim()
-  var legendOpt = { legend: { labels: { color: (cs.getPropertyValue('--legend-text') || '#a1a1a1').trim(), boxWidth: 12, boxHeight: 2, font: { size: 11 } } } }
-  var tip = { backgroundColor: tipBg, titleColor: tipFg, bodyColor: tipFg, borderColor: tipBorder, borderWidth: 1,
+  var T = chartTheme()
+  var legendOpt = { legend: { labels: { color: T.legend, boxWidth: 12, boxHeight: 2, font: { size: 11 } } } }
+  var tip = { backgroundColor: T.tipBg, titleColor: T.tipFg, bodyColor: T.tipFg, borderColor: T.tipBorder, borderWidth: 1,
     padding: 10, cornerRadius: 8, displayColors: true, boxWidth: 8, boxHeight: 8, titleFont: { weight: '600' },
     callbacks: { title: function (items) { return fullLabels[items[0].dataIndex] || items[0].label } } }
   var interact = { mode: 'index', intersect: false }
   var zoomOpt = { pan: { enabled: true, mode: 'x' },
     zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
     limits: { x: { min: 'original', max: 'original' } } }
-  var crossOpt = { line: { color: tickColor, width: 1, dashPattern: [3, 3] }, snap: { enabled: true },
+  var crossOpt = { line: { color: T.tick, width: 1, dashPattern: [3, 3] }, snap: { enabled: true },
     sync: { enabled: false }, zoom: { enabled: false } }
   var scales = function (yOpts) {
-    return { x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 0 } },
-             y: Object.assign({ grid: { color: gridColor }, ticks: { color: tickColor } }, yOpts || {}) }
+    return { x: { grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 12, maxRotation: 0 } },
+             y: Object.assign({ grid: { color: T.grid }, ticks: { color: T.tick } }, yOpts || {}) }
   }
   var ds = function (label, key, color) {
     return { label: label, data: mk(key), borderColor: color, backgroundColor: areaFill(color, 0.1), fill: true,
@@ -645,6 +694,174 @@ function renderCharts(rows) {
   $('#c1').ondblclick = function () { if (C1) C1.resetZoom() }
   $('#c2').ondblclick = function () { if (C2) C2.resetZoom() }
   $('#c3').ondblclick = function () { if (C3) C3.resetZoom() }
+
+  // ---- 睡眠结构：堆叠柱（深睡/REM/浅睡/清醒，小时），点击柱子切换眠动图 ----
+  var sec2h = function (v) { return v == null ? null : Math.max(0, Math.round(v / 360)) / 10 }
+  var barStack = function (label, key, color) {
+    return { label: label, data: rows.map(function (r) { return sec2h(r[key]) }), backgroundColor: color, stack: 's',
+      borderWidth: 0, barPercentage: 0.82, categoryPercentage: 0.9, maxBarThickness: 18 }
+  }
+  if (C4) C4.destroy()
+  C4 = new Chart($('#c4'), {
+    type: 'bar',
+    data: { labels: labels, datasets: [
+      barStack('深睡', 'deep', PALETTE.deep),
+      barStack('REM', 'rem', PALETTE.rem),
+      barStack('浅睡', 'light', PALETTE.lightslp),
+      barStack('清醒', 'awake', PALETTE.awakeslp),
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      onClick: function (e) {
+        var els = C4.getElementsAtEventForMode(e, 'index', { intersect: false }, true)
+        if (!els.length) return
+        var hit = rows[els[0].index]
+        renderHypno(hit ? hit.date : null)
+      },
+      scales: { x: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 12, maxRotation: 0 } },
+                y: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, callback: function (v) { return v + 'h' } }, suggestedMax: 9 } },
+      plugins: { legend: legendOpt.legend,
+        tooltip: Object.assign({}, tip, {
+          callbacks: {
+            title: function (items) { return fullLabels[items[0].dataIndex] || items[0].label },
+            label: function (ctx) { return ctx.dataset.label + ' ' + fmtHM((ctx.parsed.y || 0) * 3600) },
+            footer: function (items) {
+              var r = rows[items[0].dataIndex]
+              if (!r || r.deep == null) return ''
+              return '总睡眠 ' + fmtHM(r.deep + r.rem + r.light) + (r.efficiency != null ? ' · 效率 ' + r.efficiency + '%' : '')
+            },
+          },
+        }),
+        zoom: zoomOpt } },
+  })
+  $('#c4').ondblclick = function () { if (C4) C4.resetZoom() }
+
+  // ---- 压力与恢复：双向柱（上=高压力分钟，下=恢复分钟） ----
+  var SUMMARY_CN = { restored: '已恢复', normal: '正常', stressful: '高压日' }
+  var minOrNull = function (v, neg) {
+    return v == null ? null : (neg ? -1 : 1) * Math.round(v / 60)
+  }
+  if (C6) C6.destroy()
+  C6 = new Chart($('#c6'), {
+    type: 'bar',
+    data: { labels: labels, datasets: [
+      { label: '高压力', data: rows.map(function (r) { return minOrNull(r.stressHigh, false) }),
+        backgroundColor: PALETTE.rhr, stack: 's', borderWidth: 0, barPercentage: 0.82, maxBarThickness: 18 },
+      { label: '恢复', data: rows.map(function (r) { return minOrNull(r.recoveryHigh, true) }),
+        backgroundColor: PALETTE.recover, stack: 's', borderWidth: 0, barPercentage: 0.82, maxBarThickness: 18 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: { x: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 12, maxRotation: 0 } },
+                y: { stacked: true, grid: { color: T.grid }, ticks: { color: T.tick, callback: function (v) { return Math.abs(v) + 'm' } } } },
+      plugins: { legend: legendOpt.legend,
+        tooltip: Object.assign({}, tip, { displayColors: true,
+          callbacks: {
+            title: function (items) { return fullLabels[items[0].dataIndex] || items[0].label },
+            label: function (ctx) {
+              var v = ctx.parsed.y
+              return ctx.dataset.label + ' ' + Math.abs(Math.round(v)) + ' 分钟'
+            },
+            afterBody: function (items) {
+              var r = rows[items[0].dataIndex]
+              return r && r.stressSummary ? '当日总结：' + (SUMMARY_CN[r.stressSummary] || r.stressSummary) : ''
+            },
+          },
+        }),
+        zoom: zoomOpt } },
+  })
+  $('#c6').ondblclick = function () { if (C6) C6.resetZoom() }
+
+  // ---- 睡眠节奏：水平浮动条（入睡→醒来），横轴正午→次日正午 ----
+  var rhythmRows = rows.filter(function (r) { return r.bedStartH != null && r.bedEndH != null })
+  if (C7) C7.destroy()
+  $('#rhythmPanel').style.display = rhythmRows.length ? '' : 'none'
+  if (rhythmRows.length) {
+    $('#rhythmBox').style.height = Math.min(Math.max(rhythmRows.length * 13 + 42, 190), 420) + 'px'
+    C7 = new Chart($('#c7'), {
+      type: 'bar',
+      data: { labels: rhythmRows.map(function (r) { return r.date.slice(5) }),
+        datasets: [{ label: '睡眠窗口',
+          data: rhythmRows.map(function (r) { return [r.bedStartH, r.bedEndH] }),
+          backgroundColor: 'rgba(0,112,243,.55)', hoverBackgroundColor: 'rgba(0,112,243,.85)',
+          borderRadius: 3, borderSkipped: false, barPercentage: 0.72 }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { min: 0, max: 24, grid: { color: T.grid },
+            ticks: { color: T.tick, stepSize: 3, callback: function (v) { return fmtClock(v) } } },
+          y: { reverse: true, grid: { display: false }, ticks: { color: T.tick, autoSkip: true, maxTicksLimit: 16 } } },
+        plugins: { legend: { display: false },
+          tooltip: Object.assign({}, tip, { displayColors: false,
+            callbacks: {
+              title: function (items) {
+                var r = rhythmRows[items[0].dataIndex]
+                return r ? r.date : ''
+              },
+              label: function (ctx) {
+                var v = ctx.raw
+                if (!v || v.length !== 2) return ''
+                return fmtClock(v[0]) + ' 入睡 → ' + fmtClock(v[1]) + ' 醒来 · ' + fmtHM((v[1] - v[0]) * 3600)
+              },
+            },
+          }),
+          zoom: { pan: { enabled: true, mode: 'x' }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+            limits: { x: { min: 0, max: 24 } } } } },
+    })
+  }
+  renderHypno(null)
+}
+
+/** 眩动图：date 指定夜晚（null = 默认最近一晚有分期数据的） */
+function renderHypno(date) {
+  var desc = $('#hypnoDesc')
+  if (!desc) return
+  if (typeof Chart === 'undefined') return
+  var rows = window.__SUMMARY_ROWS || []
+  var row = null, i
+  if (date) {
+    for (i = rows.length - 1; i >= 0; i--) { if (rows[i].date === date) { row = rows[i]; break } }
+  } else {
+    for (i = rows.length - 1; i >= 0; i--) { if (rows[i].hypno) { row = rows[i]; break } }
+  }
+  if (HY) { HY.destroy(); HY = null }
+  if (!row || !row.hypno) {
+    desc.textContent = date ? (date + ' 暂无睡眠分期数据') : '暂无睡眠分期数据'
+    return
+  }
+  HYPNO_DATE = row.date
+  var vals = row.hypno.split('').map(function (ch) {
+    var v = Number(ch)
+    return v >= 1 && v <= 4 ? v - 1 : null
+  })
+  var stageColors = [PALETTE.deep, PALETTE.lightslp, PALETTE.rem, PALETTE.awakeslp]
+  var times = vals.map(function (_, idx) { return fmtClock(row.bedStartH != null ? row.bedStartH + idx * 5 / 60 : null) })
+  var T = chartTheme()
+  desc.textContent = row.date + ' · ' + fmtClock(row.bedStartH) + ' 入睡 → ' + fmtClock(row.bedEndH) + ' 醒来' +
+    (row.deep != null ? ' · 总睡眠 ' + fmtHM(row.deep + row.rem + row.light) : '') +
+    (row.efficiency != null ? ' · 效率 ' + row.efficiency + '%' : '') +
+    (row.sleepHrv != null ? ' · 平均 HRV ' + row.sleepHrv : '')
+  HY = new Chart($('#c5'), {
+    type: 'line',
+    data: { labels: times, datasets: [{
+      label: '睡眠分期', data: vals, stepped: true, fill: true,
+      borderColor: PALETTE.lightslp, backgroundColor: 'rgba(80,150,255,.07)',
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 3,
+      segment: { borderColor: function (ctx) { return stageColors[vals[ctx.p0DataIndex]] || PALETTE.lightslp } },
+    }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { color: T.grid }, ticks: { color: T.tick, maxTicksLimit: 10, maxRotation: 0, autoSkip: true } },
+        y: { min: -0.4, max: 3.4, grid: { color: T.grid }, border: { display: false },
+          ticks: { color: T.tick, stepSize: 1, callback: function (v) { return STAGE_NAMES[v] || '' } } } },
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: T.tipBg, titleColor: T.tipFg, bodyColor: T.tipFg, borderColor: T.tipBorder,
+          borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: false, titleFont: { weight: '600' },
+          callbacks: {
+            title: function (items) { return row.date + ' ' + (times[items[0].dataIndex] || '') },
+            label: function (ctx) { return '阶段：' + (STAGE_NAMES[ctx.parsed.y] || '—') },
+          } } } },
+  })
 }
 
 var METRICS = [
@@ -758,6 +975,8 @@ function renderMobile(rows) {
 function loadAll() {
   api('/api/data/' + UID + '/summary?days=' + DAYS).then(function (d) {
     var rows = d.days || []
+    window.__SUMMARY_ROWS = rows
+    window.__PROFILE = d.profile || {}
     renderStats(rows)
     renderCharts(rows)
     renderTable(rows)
@@ -891,7 +1110,7 @@ function init() {
   $('#themeBtn').onclick = function () {
     var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'
     applyTheme(next)
-    if (C1 || C2 || C3) loadAll()
+    if (C1 || C2 || C3 || C4 || C6 || C7 || HY) loadAll()
   }
 
   var mobTab = 'home'
@@ -927,7 +1146,11 @@ function init() {
     var el = t === 'home' ? home : (t === 'trend' ? chartsW : explorer)
     if (switching && el) { el.classList.remove('tab-anim'); void el.offsetWidth; el.classList.add('tab-anim') }
     moveInd()
-    if (t === 'trend') { setTimeout(function () { try { if (C1) C1.resize(); if (C2) C2.resize(); if (C3) C3.resize() } catch (e) {} }, 60) }
+    if (t === 'trend') {
+      setTimeout(function () {
+        ;[C1, C2, C3, C4, C6, C7, HY].forEach(function (c) { try { if (c) c.resize() } catch (e) {} })
+      }, 60)
+    }
   }
   Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function (b) {
     b.onclick = function () {
