@@ -72,6 +72,14 @@
 - MCP `get_daily_summary` / `get_today_overview` 透传新字段（附带 age 便于解读血管年龄）。
 
 ## 四、数据可靠性
-- 全部新数据走既有 `fetchCachedPaged` 缓存通道；单端点失败不影响其他端点（现有 try/catch 模式）。
-- 眠动图点击时按天查询 `sleep` 端点（服务端已有 TTL 缓存），无新权限要求（scope `daily` 已覆盖）。
+- 全部新数据走既有 `fetchCachedPaged` 缓存通道；**summary 对单个端点失败做了容错**（`Promise.all` 内 try/catch → 跳过该端点），新 scope 未授权时看板其他功能不受影响。
+- 眠动图数据（`sleep_phase_5_min`）已随 `sleep` 端点并入 summary 行（`hypno` 字段），前端点击切换零延迟。
 - 血管年龄对照的 age 来自 `personal_info`（scope `personal` 已覆盖）。
+
+## 五、实测发现（真实 token 验证 + 官方规范比对）
+
+1. **Scope 变化**：Oura 现行 scope 为 `spo2`、`stress`（韧性 daily_resilience 需要）、`heart_health`（daily_cardiovascular_age 需要）；仓库原配置的 `spo2Daily` 已失效（实测 401 "Token is not authorized access spo2 scope"）。`daily_stress` 归属 `daily` scope（实测可用）。已把 DEFAULT_SCOPE / wrangler.toml 更新为 `personal daily heartrate workout session spo2 stress heart_health email`；**存量用户需重新授权** 才能拿到血氧/韧性/心血管年龄数据，未授权时看板对应卡片显示「—」。
+2. **vo2_max 路径**：官方规范路径为 `/v2/usercollection/vO2_max`（大写 O），小写实测 404，已修正白名单映射。
+3. **新版 daily_sleep 已精简**：只有 score + contributors（贡献分），分期时长/就寝窗口/眠动图都在 `sleep` 端点（实测确认：deep/rem/light_sleep_duration、bedtime_start/end、sleep_phase_5_min、efficiency、average_hrv 等齐全）。
+4. **时区**：bedtime_start/end 自带 ISO 偏移（如 +08:00）；睡眠节奏图的小时数在后端按「时间戳自身时区 + 锚定日前一日正午」预计算（bedStartH/bedEndH），不受查看者浏览器时区影响。
+

@@ -2,8 +2,18 @@ import { ENDPOINTS, OuraClient, OuraError, ensureFreshToken, getUser } from './o
 import type { Access, Env, UserRecord } from './types'
 import { hmacHex, isoDay } from './util'
 
-// sleep = 睡眠分期端点（含睡眠期间心率采样），用于计算真实静息心率 BPM
-export const SUMMARY_ENDPOINTS = ['daily_sleep', 'daily_readiness', 'daily_activity', 'sleep'] as const
+// sleep = 睡眠分期端点（含睡眠期间心率采样），用于计算真实静息心率 BPM 与睡眠结构/眠动图
+export const SUMMARY_ENDPOINTS = [
+  'daily_sleep',
+  'daily_readiness',
+  'daily_activity',
+  'sleep',
+  'daily_stress',
+  'daily_spo2',
+  'daily_resilience',
+  'daily_cardiovascular_age',
+  'vo2_max',
+] as const
 
 export function cacheKey(userId: string, endpoint: string, params: Record<string, string>): string {
   return `cache:${userId}:${endpoint}:${JSON.stringify(params)}`
@@ -98,16 +108,52 @@ export async function fetchCachedPaged(
   return { data: { data: merged }, hit: false }
 }
 
-/** 聚合每日概览与睡眠分期为按日期合并的行（rhr = 睡眠期间平均心率 BPM，与 Oura App 口径一致） */
-export async function getSummaryRows(
+/** 解析 ISO 时间戳自带的时区偏移（分钟），如 "2026-09-13T07:12:34+08:00" → 480 */
+function offsetMinutesOf(ts: string): number {
+  const m = ts.match(/([+-])(\d{2}):?(\d{2})$/)
+  if (!m) return 0
+  return (Number(m[2]) * 60 + Number(m[3])) * (m[1] === '-' ? -1 : 1)
+}
+
+/** ISO 时间戳 → UTC 毫秒（按墙上时钟 + 自带偏移换算，不依赖运行环境时区） */
+function tsToUtcMs(ts: string): number | null {
+  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+  if (!m) return null
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])) -
+    offsetMinutesOf(ts) * 60_000
+}
+
+/** 睡眠时刻 → 相对「锚定日前一日正午」（按该时间戳自身时区）的小时数，用于睡眠节奏图 */
+function hoursSinceAnchorNoon(ts: string, day: string): number | null {
+  const utcMs = tsToUtcMs(ts)
+  const d = day.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (utcMs == null || !d) return null
+  const anchorNoonMs = Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]) - 1, 12) - offsetMinutesOf(ts) * 60_000
+  return (utcMs - anchorNoonMs) / 3_600_000
+}
+
+/**
+ * 聚合每日概览与睡眠分期为按日期合并的行（rhr = 睡眠期间平均心率 BPM，与 Oura App 口径一致）。
+ * 返回 rows 与 profile.age（用于血管年龄对照）；单个端点失败（如未授予新 scope）不影响整体。
+ */
+export async function getSummary(
   env: Env,
   rec: UserRecord,
   range: { start: string; end: string },
-): Promise<any[]> {
+): Promise<{ rows: any[]; age?: number }> {
   // 先串行确保 token 新鲜，避免并发刷新导致 refresh_token 轮换竞态
   await ensureFreshToken(env, rec)
   const params = { start_date: range.start, end_date: range.end }
-  const results = await Promise.all(SUMMARY_ENDPOINTS.map((e) => fetchCachedPaged(env, rec, e, params)))
+  const settled = await Promise.all(
+    SUMMARY_ENDPOINTS.map(async (e) => {
+      try {
+        return (await fetchCachedPaged(env, rec, e, params)).data
+      } catch {
+        // 单端点失败（scope 未授予、订阅过期等）时跳过该端点
+        return null
+      }
+    }),
+  )
   const byDay = new Map<string, any>()
   const put = (name: string, payload: any) => {
     for (const item of payload?.data ?? []) {
@@ -141,12 +187,81 @@ export async function getSummaryRows(
         : item.average_heart_rate != null
           ? Math.round(item.average_heart_rate)
           : null
+      // 睡眠结构（秒）
+      row.deep = item.deep_sleep_duration ?? null
+      row.rem = item.rem_sleep_duration ?? null
+      row.light = item.light_sleep_duration ?? null
+      row.awake = item.awake_time ?? null
+      row.efficiency = item.efficiency ?? null
+      // 睡眠窗口：正午起算的小时数（0 = 前一日 12:00，24 = 当日 12:00）
+      const sh = item.bedtime_start ? hoursSinceAnchorNoon(item.bedtime_start, day) : null
+      const eh = item.bedtime_end ? hoursSinceAnchorNoon(item.bedtime_end, day) : null
+      if (sh != null && eh != null && eh > sh) {
+        row.bedStartH = Math.round(Math.min(Math.max(sh, 0), 24) * 100) / 100
+        row.bedEndH = Math.round(Math.min(Math.max(eh, 0), 24) * 100) / 100
+      }
+      // 眠动图（5 分钟分期字符串：1=深睡 2=浅睡 3=REM 4=清醒）
+      row.hypno = typeof item.sleep_phase_5_min === 'string' && item.sleep_phase_5_min ? item.sleep_phase_5_min : null
+      // 睡眠期间平均 HRV
+      row.sleepHrv = item.average_hrv ?? null
       byDay.set(day, row)
     }
   }
-  put('sleep', results[0].data)
-  put('readiness', results[1].data)
-  put('activity', results[2].data)
-  putSleepPeriods(results[3].data)
-  return [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+  put('sleep', settled[0])
+  put('readiness', settled[1])
+  put('activity', settled[2])
+  putSleepPeriods(settled[3])
+  if (settled[4]) {
+    for (const item of settled[4].data ?? []) {
+      if (!item?.day) continue
+      const row = byDay.get(item.day) ?? { date: item.day }
+      row.stressHigh = item.stress_high ?? null
+      row.recoveryHigh = item.recovery_high ?? null
+      row.stressSummary = item.day_summary ?? null
+      byDay.set(item.day, row)
+    }
+  }
+  if (settled[5]) {
+    for (const item of settled[5].data ?? []) {
+      if (!item?.day) continue
+      const row = byDay.get(item.day) ?? { date: item.day }
+      row.spo2 = item.spo2_percentage?.average ?? null
+      row.bdi = item.breathing_disturbance_index ?? null
+      byDay.set(item.day, row)
+    }
+  }
+  if (settled[6]) {
+    for (const item of settled[6].data ?? []) {
+      if (!item?.day) continue
+      const row = byDay.get(item.day) ?? { date: item.day }
+      row.resilience = item.level ?? null
+      byDay.set(item.day, row)
+    }
+  }
+  if (settled[7]) {
+    for (const item of settled[7].data ?? []) {
+      if (!item?.day) continue
+      const row = byDay.get(item.day) ?? { date: item.day }
+      row.vascularAge = item.vascular_age ?? null
+      row.pwv = item.pulse_wave_velocity ?? null
+      byDay.set(item.day, row)
+    }
+  }
+  if (settled[8]) {
+    for (const item of settled[8].data ?? []) {
+      if (!item?.day) continue
+      const row = byDay.get(item.day) ?? { date: item.day }
+      row.vo2max = item.vo2_max ?? null
+      byDay.set(item.day, row)
+    }
+  }
+  let age: number | undefined
+  try {
+    const { data } = await fetchCached(env, rec, 'personal_info', {})
+    const n = Number(data?.age)
+    if (Number.isFinite(n) && n > 0) age = n
+  } catch {
+    // 无 personal 权限时忽略
+  }
+  return { rows: [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)), age }
 }

@@ -9,8 +9,9 @@ binding = "OURA_KV"
 id = "REPLACE_WITH_YOUR_KV_ID"
 
 [vars]
-# 请求的 Oura OAuth scope（空格分隔）
-OURA_SCOPE = "personal daily heartrate workout session spo2Daily email"
+# 请求的 Oura OAuth scope（空格分隔）。spo2/stress/heart_health 为新版 scope：
+# 血氧、韧性（stress）、心血管年龄（heart_health）；旧部署需让用户重新授权才能拿到这些数据
+OURA_SCOPE = "personal daily heartrate workout session spo2 stress heart_health email"
 # cron 同步时是否同时预取昨日+今日的每日概览数据（1 开启，0 关闭）
 CRON_PREFETCH = "1"
 # 如使用自定义域名导致回调推导不正确，取消注释并填写

@@ -4,7 +4,8 @@ export const OURA_API = 'https://api.ouraring.com/v2'
 export const OURA_AUTHORIZE = 'https://cloud.ouraring.com/oauth/authorize'
 export const OURA_TOKEN = 'https://api.ouraring.com/oauth/token'
 
-export const DEFAULT_SCOPE = 'personal daily heartrate workout session spo2Daily email'
+// Oura 2026 现行 scope：spo2（旧的 spo2Daily 已失效）、stress（韧性/压力）、heart_health（心血管年龄）
+export const DEFAULT_SCOPE = 'personal daily heartrate workout session spo2 stress heart_health email'
 
 export class OuraError extends Error {
   status: number
@@ -27,7 +28,8 @@ export const ENDPOINTS: Record<string, { path: string; ttl: number }> = {
   daily_stress: { path: 'daily_stress', ttl: 900 },
   daily_resilience: { path: 'daily_resilience', ttl: 900 },
   daily_cardiovascular_age: { path: 'daily_cardiovascular_age', ttl: 900 },
-  vo2_max: { path: 'vo2_max', ttl: 900 },
+  // 注意：Oura 官方路径是 vO2_max（大写 O），小写会 404
+  vo2_max: { path: 'vO2_max', ttl: 900 },
   rest_mode_period: { path: 'rest_mode_period', ttl: 900 },
   sleep: { path: 'sleep', ttl: 300 },
   sleep_time: { path: 'sleep_time', ttl: 300 },

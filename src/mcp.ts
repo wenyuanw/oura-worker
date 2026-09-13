@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono'
 import { ENDPOINTS } from './oura'
-import { fetchCached, getSummaryRows, listUsers, resolveAccess } from './data'
+import { fetchCached, getSummary, listUsers, resolveAccess } from './data'
 import type { Access, Env, UserRecord } from './types'
 import { isoDay } from './util'
 
@@ -53,7 +53,7 @@ function toolDefinitions() {
     {
       name: 'get_daily_summary',
       description:
-        '获取某个用户按日期合并的每日概览：睡眠评分、恢复度、活动评分、静息心率（睡眠期间平均心率，次/分）、HRV 平衡（1–100 贡献分）。默认最近 30 天，可用 days 或 startDate/endDate 控制',
+        '获取某个用户按日期合并的每日概览：睡眠/恢复度/活动评分、静息心率（BPM）、HRV 平衡、睡眠结构（deep/rem/light/awake 秒）、睡眠效率、睡眠窗口（bedStartH/bedEndH，正午起算小时）、5 分钟眠动图（hypno）、压力/恢复时长（秒）、血氧、韧性等级、血管年龄、VO2 max。默认最近 30 天，可用 days 或 startDate/endDate 控制',
       inputSchema: {
         type: 'object',
         properties: {
@@ -174,13 +174,14 @@ async function callTool(env: Env, name: string, args: any, access: Access): Prom
       const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30
       const start = typeof args?.startDate === 'string' && args.startDate ? args.startDate : isoDay(-(days - 1))
       const end = typeof args?.endDate === 'string' && args.endDate ? args.endDate : isoDay(0)
-      const rows = await getSummaryRows(env, u.rec, { start, end })
+      const { rows, age } = await getSummary(env, u.rec, { start, end })
       return {
         content: [
           text(
             JSON.stringify(
               {
                 user: { id: u.rec.id, email: u.rec.email ?? null, alias: u.rec.alias ?? null },
+                profile: { age: age ?? null },
                 start,
                 end,
                 days: rows,
@@ -217,7 +218,7 @@ async function callTool(env: Env, name: string, args: any, access: Access): Prom
         new Date(Date.now() + offsetMin * 60_000 + offsetDays * 86_400_000).toISOString().slice(0, 10)
       const today = localDay(0)
       const yesterday = localDay(-1)
-      const rows = await getSummaryRows(env, u.rec, { start: yesterday, end: today })
+      const { rows } = await getSummary(env, u.rec, { start: yesterday, end: today })
       const pick = (d: string) => rows.find((r) => r.date === d) ?? null
       let currentHeartRate: { bpm: number; timestamp: string | null; source: string | null } | null = null
       try {

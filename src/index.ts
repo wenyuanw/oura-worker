@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { connectedPage, dashboardPage, errorPage, loginPage } from './dashboard'
-import { fetchCached, fetchCachedPaged, getSummaryRows, listUsers, resolveAccess, SUMMARY_ENDPOINTS } from './data'
+import { fetchCached, fetchCachedPaged, getSummary, listUsers, resolveAccess, SUMMARY_ENDPOINTS } from './data'
 import {
   DEFAULT_SCOPE,
   ENDPOINTS,
@@ -200,8 +200,8 @@ app.get('/api/data/:userId/summary', async (c) => {
   const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '30', 10) || 30, 1), 365)
   const range = { start: isoDay(-(days - 1)), end: isoDay(0) }
   try {
-    const rows = await getSummaryRows(c.env, rec, range)
-    return c.json({ start: range.start, end: range.end, days: rows })
+    const { rows, age } = await getSummary(c.env, rec, range)
+    return c.json({ start: range.start, end: range.end, profile: { age: age ?? null }, days: rows })
   } catch (e) {
     return errorResponse(c, e)
   }
