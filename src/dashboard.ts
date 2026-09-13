@@ -638,7 +638,7 @@ function renderStats(rows) {
       }
     }
     var sparkVals = rows.slice(-7).map(function (r) { return numOf(r, m) })
-    var spark = m.cat ? '' : sparkSVG(sparkVals, m.color)
+    var spark = m.cat ? '' : sparkSVG(sparkVals, m.color, m.spark)
     var sub
     if (!last) sub = '暂无数据'
     else if (m.key === 'vascularAge') sub = '岁'
@@ -942,15 +942,15 @@ var ICONS = {
   vo2max: SVGO + '<path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg>',
 }
 var METRICS = [
-  { key: 'sleep', name: '睡眠评分', color: PALETTE.sleep },
-  { key: 'readiness', name: '恢复度', color: PALETTE.readiness },
-  { key: 'activity', name: '活动', color: PALETTE.activity },
-  { key: 'rhr', name: '静息心率', color: PALETTE.rhr, good: 'down' },
-  { key: 'hrv', name: 'HRV 平衡', color: PALETTE.hrv },
-  { key: 'spo2', name: '血氧 %', color: '#0ea5e9' },
+  { key: 'sleep', name: '睡眠评分', color: PALETTE.sleep, spark: 'line' },
+  { key: 'readiness', name: '恢复度', color: PALETTE.readiness, spark: 'bar' },
+  { key: 'activity', name: '活动', color: PALETTE.activity, spark: 'line' },
+  { key: 'rhr', name: '静息心率', color: PALETTE.rhr, good: 'down', spark: 'line' },
+  { key: 'hrv', name: 'HRV 平衡', color: PALETTE.hrv, spark: 'bar' },
+  { key: 'spo2', name: '血氧 %', color: '#0ea5e9', spark: 'bar' },
   { key: 'resilience', name: '韧性', color: '#d946ef', cat: true, tip: RESILIENCE_TIP },
-  { key: 'vascularAge', name: '血管年龄', color: '#f43f5e', good: 'down', tip: '估算的血管健康年龄，低于实际年龄为佳' },
-  { key: 'vo2max', name: 'VO2 max', color: '#84cc16', tip: '最大摄氧量：身体利用氧气的上限能力（ml/kg/min）' },
+  { key: 'vascularAge', name: '血管年龄', color: '#f43f5e', good: 'down', spark: 'bar', tip: '估算的血管健康年龄，低于实际年龄为佳' },
+  { key: 'vo2max', name: 'VO2 max', color: '#84cc16', spark: 'line', tip: '最大摄氧量：身体利用氧气的上限能力（ml/kg/min）' },
 ]
 
 /** 韧性等级条 HTML（当前等级高亮） */
@@ -983,21 +983,66 @@ function weekdayCN(iso) {
   return isNaN(d) ? '' : '日一二三四五六'.charAt(d.getUTCDay())
 }
 
-function sparkSVG(vals, color) {
-  var pts = [], min = Infinity, max = -Infinity, i, v
+/** 迷你趋势图：kind='line' 折线+渐变面积+末端圆点；kind='bar' 圆头渐变柱 */
+var sparkUid = 0
+function sparkSVG(vals, color, kind) {
+  var i, v
+  var min = Infinity, max = -Infinity
   for (i = 0; i < vals.length; i++) { v = vals[i]; if (v == null) continue; if (v < min) min = v; if (v > max) max = v }
-  if (!isFinite(min) || min === max) return ''
+  if (!isFinite(min)) return ''
+  if (min === max) { min -= 0.5; max += 0.5 }
+  var W = 90, H = 36
+  var pts = []
   for (i = 0; i < vals.length; i++) {
     v = vals[i]
     if (v == null) continue
-    var x = 2 + (i / (vals.length - 1 || 1)) * 86
-    var y = 32 - ((v - min) / (max - min)) * 26
-    pts.push([x, y])
+    pts.push([2 + (i / (vals.length - 1 || 1)) * (W - 6), H - 4 - ((v - min) / (max - min)) * (H - 12)])
   }
-  if (pts.length < 2) return ''
-  var pl = pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1) }).join(' ')
+  if (!pts.length) return ''
+  sparkUid++
+  var gid = 'sg' + sparkUid
+  var defs = '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="' + color + '" stop-opacity=".9"/>' +
+    '<stop offset="1" stop-color="' + color + '" stop-opacity=".22"/></linearGradient>' +
+    '<linearGradient id="' + gid + 'f" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="' + color + '" stop-opacity=".26"/>' +
+    '<stop offset="1" stop-color="' + color + '" stop-opacity="0"/></linearGradient></defs>'
+  var svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">' + defs
+
+  if (kind === 'bar') {
+    var step = (W - 4) / vals.length
+    var bw = Math.max(4, Math.min(11, step - 3))
+    for (i = 0; i < pts.length; i++) {
+      var h = Math.max(7, H - 4 - pts[i][1])
+      var isLast = i === pts.length - 1
+      svg += '<rect x="' + (pts[i][0] - bw / 2).toFixed(1) + '" y="' + (H - 3 - h).toFixed(1) +
+        '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + (bw / 2).toFixed(1) +
+        '" fill="url(#' + gid + ')"' + (isLast ? '' : ' opacity=".55"') + '/>'
+    }
+    svg += '</svg>'
+    return svg
+  }
+
+  // 折线：经过中点的二次贝塞尔平滑
+  var d = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1)
+  if (pts.length === 2) {
+    d += ' L' + pts[1][0].toFixed(1) + ',' + pts[1][1].toFixed(1)
+  } else {
+    for (i = 1; i < pts.length - 1; i++) {
+      var mx = (pts[i][0] + pts[i + 1][0]) / 2
+      var my = (pts[i][1] + pts[i + 1][1]) / 2
+      d += ' Q' + pts[i][0].toFixed(1) + ',' + pts[i][1].toFixed(1) + ' ' + mx.toFixed(1) + ',' + my.toFixed(1)
+    }
+    var lp = pts[pts.length - 1]
+    d += ' L' + lp[0].toFixed(1) + ',' + lp[1].toFixed(1)
+  }
+  var area = d + ' L' + pts[pts.length - 1][0].toFixed(1) + ',' + (H - 1) + ' L' + pts[0][0].toFixed(1) + ',' + (H - 1) + ' Z'
   var last = pts[pts.length - 1]
-  return '<svg width="90" height="36" viewBox="0 0 90 36"><polyline points="' + pl + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3" fill="' + color + '"/></svg>'
+  svg += '<path d="' + area + '" fill="url(#' + gid + 'f)"/>' +
+    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="5.5" fill="' + color + '" opacity=".22"/>' +
+    '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="2.8" fill="' + color + '"/></svg>'
+  return svg
 }
 
 function makeUserLabel(u) {
@@ -1092,7 +1137,7 @@ function renderMobile(rows) {
     if (m.cat && lastRow) bigVal = '<span style="font-size:30px;color:' + RESILIENCE_COLOR[lastRow[m.key]] + '">' + latest + '</span>'
     cards += '<div class="mcard" data-key="' + m.key + '">' +
       '<div class="mcard-head">' + icon + '<span class="mcard-name">' + m.name + '</span><span class="mcard-date">' + (lastRow ? lastRow.date.slice(5) : '') + '</span><span class="chev">›</span></div>' +
-      '<div class="mcard-body"><div class="mcard-val"><div class="sub">最新</div><div class="big">' + bigVal + '</div></div>' + (sparkSVG(sparkVals, m.color) || '') + '</div>' +
+      '<div class="mcard-body"><div class="mcard-val"><div class="sub">最新</div><div class="big">' + bigVal + '</div></div>' + (sparkSVG(sparkVals, m.color, m.spark) || '') + '</div>' +
       '<div class="mcard-detail">' + (explain ? '<p class="narrative">' + explain + '</p>' : '') + '<p class="narrative">' + narrative + '</p><div class="pillbars">' + bars + '</div></div>' +
       '</div>'
   })
