@@ -170,9 +170,11 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .mcard .chev { color:var(--fg-subtle); transition:transform .2s; font-size:16px }
 .mcard.open .chev { transform:rotate(90deg) }
 .mcard-body { display:flex; align-items:flex-end; justify-content:space-between; margin-top:10px; gap:12px }
+.mcard-val { min-width:0 }
 .mcard-val .sub { font-size:12px; color:var(--fg-subtle) }
 .mcard-val .big { font-size:36px; font-weight:600; line-height:1.15;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .mcard-detail { display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:12px }
 .mcard.open .mcard-detail { display:block }
 .narrative { font-size:13px; color:var(--fg-muted); margin:0 0 14px; line-height:1.7 }
@@ -248,8 +250,10 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px }
 .stat .label { display:flex; align-items:center; gap:7px; color:var(--fg-muted); font-size:12px }
 .stat .dot { width:6px; height:6px; border-radius:50% }
+.stat-main { min-width:0 }
 .stat .value { font-size:30px; font-weight:600; line-height:1.35;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums }
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .stat .sub { color:var(--fg-subtle); font-size:12px }
 .stat-body { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; margin-top:8px; min-height:40px }
 .stat .spark { flex:none; line-height:0 }

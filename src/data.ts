@@ -242,7 +242,9 @@ export async function getSummary(
     for (const item of settled[5].data ?? []) {
       if (!item?.day) continue
       const row = byDay.get(item.day) ?? { date: item.day }
-      row.spo2 = item.spo2_percentage?.average ?? null
+      // 血氧均值四舍五入到 1 位小数：原始长浮点直出会撑爆看板卡片
+      const spo2 = item.spo2_percentage?.average
+      row.spo2 = spo2 == null ? null : Math.round(spo2 * 10) / 10
       row.bdi = item.breathing_disturbance_index ?? null
       byDay.set(item.day, row)
     }
