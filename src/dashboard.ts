@@ -248,15 +248,17 @@ input[type=password] { height:40px; width:100%; margin:16px 0 12px; padding:0 12
 .panel .desc { font-size:12px; color:var(--fg-subtle); margin:0 0 16px }
 .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px }
 .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px }
+.stat { overflow:hidden }
 .stat .label { display:flex; align-items:center; gap:7px; color:var(--fg-muted); font-size:12px }
 .stat .dot { width:6px; height:6px; border-radius:50% }
-.stat-main { min-width:0 }
+.stat-main { flex:none }
 .stat .value { font-size:30px; font-weight:600; line-height:1.35;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  white-space:nowrap }
 .stat .sub { color:var(--fg-subtle); font-size:12px }
 .stat-body { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; margin-top:8px; min-height:40px }
-.stat .spark { flex:none; line-height:0 }
+.stat .spark { flex:0 1 90px; min-width:0; line-height:0 }
+.stat .spark svg { width:100%; height:auto; aspect-ratio:90/36 }
 .stat .delta { margin-top:6px; font-size:11.5px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-variant-numeric:tabular-nums }
 .delta.up { color:var(--green) }
