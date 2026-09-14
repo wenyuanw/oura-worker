@@ -120,8 +120,12 @@ app.get('/auth/callback', async (c) => {
     const rec: UserRecord = {
       id: info.id,
       email: info.email ?? existing?.email,
+      // 重新授权（如补授 spo2/stress/heart_health）不能丢掉既有设置
+      alias: existing?.alias,
+      userKey: existing?.userKey,
       tokens,
       connectedAt: existing?.connectedAt ?? Math.floor(Date.now() / 1000),
+      lastSyncAt: existing?.lastSyncAt,
     }
     await saveUser(c.env, rec)
     return c.html(connectedPage(rec.email, rec.id))
@@ -204,8 +208,8 @@ app.get('/api/data/:userId/summary', async (c) => {
   const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '30', 10) || 30, 1), 365)
   const range = { start: isoDay(-(days - 1)), end: isoDay(0) }
   try {
-    const { rows, age } = await getSummary(c.env, rec, range)
-    return c.json({ start: range.start, end: range.end, profile: { age: age ?? null }, days: rows })
+    const { rows, age, scopeGaps } = await getSummary(c.env, rec, range)
+    return c.json({ start: range.start, end: range.end, profile: { age: age ?? null }, days: rows, scopeGaps })
   } catch (e) {
     return errorResponse(c, e)
   }

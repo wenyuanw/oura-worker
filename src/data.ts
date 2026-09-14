@@ -132,24 +132,41 @@ function hoursSinceAnchorNoon(ts: string, day: string): number | null {
   return (utcMs - anchorNoonMs) / 3_600_000
 }
 
+// 概览端点 → 指标名：缺 scope 时把具体指标反馈给看板，提示用户重新授权
+const SUMMARY_METRIC_NAMES: Partial<Record<(typeof SUMMARY_ENDPOINTS)[number], string>> = {
+  daily_spo2: '血氧',
+  daily_resilience: '韧性',
+  daily_cardiovascular_age: '血管年龄',
+  vo2_max: 'VO2 max',
+}
+
 /**
  * 聚合每日概览与睡眠分期为按日期合并的行（rhr = 睡眠期间平均心率 BPM，与 Oura App 口径一致）。
- * 返回 rows 与 profile.age（用于血管年龄对照）；单个端点失败（如未授予新 scope）不影响整体。
+ * 返回 rows 与 profile.age（用于血管年龄对照）；单个端点失败（如未授予新 scope）不影响整体，
+ * 因缺 scope 被跳过的端点汇总在 scopeGaps 里（scope → 受影响指标），供看板提示重新授权。
  */
 export async function getSummary(
   env: Env,
   rec: UserRecord,
   range: { start: string; end: string },
-): Promise<{ rows: any[]; age?: number }> {
+): Promise<{ rows: any[]; age?: number; scopeGaps: { scope: string; metrics: string[] }[] }> {
   // 先串行确保 token 新鲜，避免并发刷新导致 refresh_token 轮换竞态
   await ensureFreshToken(env, rec)
   const params = { start_date: range.start, end_date: range.end }
+  const scopeGaps = new Map<string, Set<string>>()
   const settled = await Promise.all(
     SUMMARY_ENDPOINTS.map(async (e) => {
       try {
         return (await fetchCachedPaged(env, rec, e, params)).data
-      } catch {
+      } catch (err) {
         // 单端点失败（scope 未授予、订阅过期等）时跳过该端点
+        const m = err instanceof Error ? err.message.match(/not authorized access ([a-z0-9_]+) scope/) : null
+        const metric = SUMMARY_METRIC_NAMES[e]
+        if (m && metric) {
+          const set = scopeGaps.get(m[1]) ?? new Set<string>()
+          set.add(metric)
+          scopeGaps.set(m[1], set)
+        }
         return null
       }
     }),
@@ -263,5 +280,9 @@ export async function getSummary(
   } catch {
     // 无 personal 权限时忽略
   }
-  return { rows: [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)), age }
+  return {
+    rows: [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+    age,
+    scopeGaps: [...scopeGaps].map(([scope, metrics]) => ({ scope, metrics: [...metrics].sort() })),
+  }
 }

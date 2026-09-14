@@ -91,13 +91,27 @@ export async function getUser(env: Env, id: string): Promise<UserRecord | null> 
 }
 
 /** token 快过期时刷新并落库（注意：并发调用可能触发 refresh_token 轮换竞态，调用方应先串行 ensure 一次） */
+// token 快过期时就刷新并落库（注意：refresh_token 会轮换，同用户的并发刷新会互相失效，
+// 这里按用户 id 合并为单飞：并发调用共享同一次刷新）
+const refreshInFlight = new Map<string, Promise<UserRecord>>()
+
 export async function ensureFreshToken(env: Env, rec: UserRecord): Promise<UserRecord> {
   const now = Math.floor(Date.now() / 1000)
   if (rec.tokens.expiresAt - now > REFRESH_MARGIN_SEC) return rec
-  const fresh = await refreshTokens(env, rec.tokens.refreshToken)
-  rec.tokens = { ...fresh, scope: fresh.scope || rec.tokens.scope }
-  await saveUser(env, rec)
-  return rec
+  const inFlight = refreshInFlight.get(rec.id)
+  if (inFlight) return inFlight
+  const p = (async () => {
+    const fresh = await refreshTokens(env, rec.tokens.refreshToken)
+    rec.tokens = { ...fresh, scope: fresh.scope || rec.tokens.scope }
+    await saveUser(env, rec)
+    return rec
+  })()
+  refreshInFlight.set(rec.id, p)
+  try {
+    return await p
+  } finally {
+    refreshInFlight.delete(rec.id)
+  }
 }
 
 export class OuraClient {
@@ -113,14 +127,18 @@ export class OuraClient {
     this.rec = await ensureFreshToken(this.env, this.rec)
     const qs = Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : ''
     const url = `${OURA_API}/usercollection/${path}${qs}`
-    let res = await fetch(url, { headers: { authorization: `Bearer ${this.rec.tokens.accessToken}` } })
-    if (res.status === 401) {
-      // token 可能被服务端提前吊销：强制刷新后重试一次
+    const call = () => fetch(url, { headers: { authorization: `Bearer ${this.rec.tokens.accessToken}` } })
+    let res = await call()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let body: any = await res.json().catch(() => null)
+    if (res.status === 401 && !String(body?.detail ?? '').includes('not authorized access')) {
+      // token 被服务端提前吊销：强制刷新后重试一次。scope 不足的 401 刷新后依旧，
+      // 不走重试（并发端点各自强刷会触发 refresh_token 轮换竞态，把错误信息也冲掉）
       this.rec.tokens.expiresAt = 0
       this.rec = await ensureFreshToken(this.env, this.rec)
-      res = await fetch(url, { headers: { authorization: `Bearer ${this.rec.tokens.accessToken}` } })
+      res = await call()
+      body = await res.json().catch(() => null)
     }
-    const body = await res.json().catch(() => null)
     return { status: res.status, body, retryAfter: res.headers.get('retry-after') ?? undefined }
   }
 }
