@@ -309,6 +309,7 @@ pre { background:var(--surface-2); border:1px solid var(--border); border-radius
 /* ---- 锻炼列表 ---- */
 .wrow { display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--border); font-size:13px }
 .wrow:last-child { border-bottom:none }
+#workoutList { max-height:252px; overflow-y:auto; scrollbar-width:thin }
 .wdot { width:8px; height:8px; border-radius:50%; flex:none }
 .wname { font-weight:500; flex:none }
 .wmeta { color:var(--fg-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
@@ -358,6 +359,7 @@ export function shell(title: string, body: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#000000">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='9' fill='none' stroke='%230070f3' stroke-width='3.2'/></svg>">
 <script>try{var t=localStorage.getItem('oura_theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','dark')}</script>
 <title>${esc(title)}</title>
 <style>${BASE_CSS}</style>
@@ -558,6 +560,7 @@ export function dashboardPage(): string {
         </div>
         <select id="expField" style="display:none"></select>
         <span class="subtle" id="expStats" style="font-size:12px"></span>
+        <button id="expExport" class="btn" style="margin-left:auto" title="把当前查询结果下载为 JSON 文件">⬇ 导出 JSON</button>
       </div>
       <div class="chart-box" id="expChartBox" style="display:none; margin-top:12px; height:260px">
         <canvas id="expChart"></canvas>
@@ -1611,7 +1614,7 @@ function init() {
   $('#d1').value = d1.toISOString().slice(0, 10)
   $('#d2').value = d2.toISOString().slice(0, 10)
   var expChart = null
-  var EXP = null
+  var EXP = null, EXP_RAW = null
 
   function parseExplorerData(d) {
     var records = d && d.data ? d.data : (Array.isArray(d) ? d : null)
@@ -1708,6 +1711,19 @@ function init() {
   $('#expViewRaw').onclick = function () { setExpView('raw') }
   $('#expField').onchange = function () { renderExpChart() }
 
+  // 导出最近一次查询的原始响应为 JSON 文件（文件名带端点与日期范围）
+  $('#expExport').onclick = function () {
+    if (!EXP_RAW) return
+    var range = ($('#d1').value ? '-' + $('#d1').value : '') + ($('#d2').value ? '_' + $('#d2').value : '')
+    var a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(EXP_RAW, null, 2)], { type: 'application/json' }))
+    a.download = 'oura-' + epSel.value + range + '.json'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(function () { URL.revokeObjectURL(a.href) }, 1000)
+  }
+
   $('#explore').onclick = function () {
     var ep = epSel.value
     var q = []
@@ -1718,6 +1734,7 @@ function init() {
     api('/api/data/' + UID + '/' + ep + (q.length ? '?' + q.join('&') : ''))
       .then(function (d) {
         $('#out').textContent = JSON.stringify(d, null, 2)
+        EXP_RAW = d
         EXP = parseExplorerData(d)
         buildExpField()
         setExpView(EXP.records.length && EXP.xKey && EXP.numKeys.length ? 'chart' : 'raw')
