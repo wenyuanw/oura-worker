@@ -4,6 +4,7 @@ import { connectedPage, dashboardPage, errorPage, loginPage } from './dashboard'
 import { fetchCached, fetchCachedPaged, getSummary, listUsers, resolveAccess, SUMMARY_ENDPOINTS } from './data'
 import {
   DEFAULT_SCOPE,
+  deleteUserKeyIndex,
   ENDPOINTS,
   OuraError,
   OURA_AUTHORIZE,
@@ -11,6 +12,7 @@ import {
   exchangeCode,
   fetchPersonalInfo,
   getUser,
+  putUserKeyIndex,
   saveUser,
 } from './oura'
 import { registerMcpRoutes } from './mcp'
@@ -166,10 +168,13 @@ app.get('/api/users', async (c) => {
 app.post('/api/connections/:id/key', adminOnly, async (c) => {
   const rec = await getUser(c.env, c.req.param('id'))
   if (!rec) return c.json({ error: 'user_not_found' }, 404)
+  const previousKey = rec.userKey
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   rec.userKey = 'uk_' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
   await saveUser(c.env, rec)
+  await putUserKeyIndex(c.env, rec.userKey, rec.id)
+  if (previousKey) await deleteUserKeyIndex(c.env, previousKey)
   return c.json({ ok: true, userKey: rec.userKey })
 })
 
@@ -186,8 +191,10 @@ app.post('/api/connections/:id/alias', adminOnly, async (c) => {
 
 app.post('/api/connections/:id/disconnect', adminOnly, async (c) => {
   const id = c.req.param('id')
-  if (!(await getUser(c.env, id))) return c.json({ error: 'user_not_found' }, 404)
+  const rec = await getUser(c.env, id)
+  if (!rec) return c.json({ error: 'user_not_found' }, 404)
   await c.env.OURA_KV.delete(`user:${id}`)
+  if (rec.userKey) await deleteUserKeyIndex(c.env, rec.userKey)
   let cursor: string | undefined
   for (;;) {
     const list = await c.env.OURA_KV.list({ prefix: `cache:${id}:`, cursor })

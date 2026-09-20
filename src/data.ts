@@ -1,4 +1,13 @@
-import { ENDPOINTS, OuraClient, OuraError, ensureFreshToken, getUser } from './oura'
+import {
+  ENDPOINTS,
+  OuraClient,
+  OuraError,
+  ensureFreshToken,
+  getUser,
+  getUserByKey,
+  putUserKeyIndex,
+  userKeysEqual,
+} from './oura'
 import type { Access, Env, UserRecord } from './types'
 import { hmacHex, isoDay } from './util'
 
@@ -35,8 +44,15 @@ export async function resolveAccess(c: {
   const m = cookieHeader.match(/(?:^|;\s*)oura_admin=([^;]+)/)
   if (m && m[1] === (await hmacHex(env.ADMIN_KEY, 'admin-v1'))) return { admin: true }
   if (bearer) {
-    const rec = (await listUsers(env)).find((u) => u.userKey === bearer)
-    if (rec) return { admin: false, rec }
+    const indexed = await getUserByKey(env, bearer)
+    if (indexed) return { admin: false, rec: indexed }
+    // 兼容部署前已生成的个人 Key：首次命中旧记录时补写索引，后续请求直接读取。
+    for (const rec of await listUsers(env)) {
+      if (rec.userKey && (await userKeysEqual(bearer, rec.userKey))) {
+        await putUserKeyIndex(env, bearer, rec.id)
+        return { admin: false, rec }
+      }
+    }
   }
   return null
 }

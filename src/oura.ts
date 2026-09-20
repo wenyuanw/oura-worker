@@ -90,6 +90,42 @@ export async function getUser(env: Env, id: string): Promise<UserRecord | null> 
   return raw ? (JSON.parse(raw) as UserRecord) : null
 }
 
+const USER_KEY_INDEX_PREFIX = 'user-key:'
+
+async function userKeyDigest(userKey: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userKey)))
+}
+
+export async function userKeysEqual(left: string, right: string): Promise<boolean> {
+  const [leftDigest, rightDigest] = await Promise.all([userKeyDigest(left), userKeyDigest(right)])
+  return crypto.subtle.timingSafeEqual(leftDigest, rightDigest)
+}
+
+function userKeyIndexKey(digest: Uint8Array): string {
+  return USER_KEY_INDEX_PREFIX + [...digest].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** 个人 Key 的哈希索引：避免每次鉴权都 list 全部用户；KV 键名不暴露原始 Key。 */
+export async function putUserKeyIndex(env: Env, userKey: string, userId: string): Promise<void> {
+  const digest = await userKeyDigest(userKey)
+  await env.OURA_KV.put(userKeyIndexKey(digest), userId)
+}
+
+export async function deleteUserKeyIndex(env: Env, userKey: string): Promise<void> {
+  const digest = await userKeyDigest(userKey)
+  await env.OURA_KV.delete(userKeyIndexKey(digest))
+}
+
+export async function getUserByKey(env: Env, userKey: string): Promise<UserRecord | null> {
+  const providedDigest = await userKeyDigest(userKey)
+  const userId = await env.OURA_KV.get(userKeyIndexKey(providedDigest))
+  if (!userId) return null
+  const rec = await getUser(env, userId)
+  if (!rec?.userKey) return null
+  const storedDigest = await userKeyDigest(rec.userKey)
+  return crypto.subtle.timingSafeEqual(providedDigest, storedDigest) ? rec : null
+}
+
 /** token 快过期时刷新并落库（注意：并发调用可能触发 refresh_token 轮换竞态，调用方应先串行 ensure 一次） */
 // token 快过期时就刷新并落库（注意：refresh_token 会轮换，同用户的并发刷新会互相失效，
 // 这里按用户 id 合并为单飞：并发调用共享同一次刷新）
